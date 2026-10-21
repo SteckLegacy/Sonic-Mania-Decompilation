@@ -33,6 +33,51 @@ static inline std::string PS3_ToString(int val) {
     return std::string(); 
 }
 
+static inline std::string PS3_ToString(unsigned int val) {
+    char buffer[32];
+    int len = ::snprintf(buffer, sizeof(buffer), "%u", val);
+    if (len >= 0 && len < (int)sizeof(buffer)) {
+        return std::string(buffer, len);
+    }
+    return std::string();
+}
+
+static inline std::string PS3_ToString(long val) {
+    char buffer[32];
+    int len = ::snprintf(buffer, sizeof(buffer), "%ld", val);
+    if (len >= 0 && len < (int)sizeof(buffer)) {
+        return std::string(buffer, len);
+    }
+    return std::string();
+}
+
+static inline std::string PS3_ToString(unsigned long val) {
+    char buffer[32];
+    int len = ::snprintf(buffer, sizeof(buffer), "%lu", val);
+    if (len >= 0 && len < (int)sizeof(buffer)) {
+        return std::string(buffer, len);
+    }
+    return std::string();
+}
+
+static inline std::string PS3_ToString(long long val) {
+    char buffer[32];
+    int len = ::snprintf(buffer, sizeof(buffer), "%lld", val);
+    if (len >= 0 && len < (int)sizeof(buffer)) {
+        return std::string(buffer, len);
+    }
+    return std::string();
+}
+
+static inline std::string PS3_ToString(unsigned long long val) {
+    char buffer[32];
+    int len = ::snprintf(buffer, sizeof(buffer), "%llu", val);
+    if (len >= 0 && len < (int)sizeof(buffer)) {
+        return std::string(buffer, len);
+    }
+    return std::string();
+}
+
 static inline std::string PS3_ToString(float val) {
     char buffer[64];
     int len = ::snprintf(buffer, sizeof(buffer), "%.6g", val);
@@ -42,9 +87,9 @@ static inline std::string PS3_ToString(float val) {
     return std::string();
 }
 
-static inline std::string PS3_ToString(size_t val) {
-    char buffer[32]; 
-    int len = ::snprintf(buffer, sizeof(buffer), "%lu", (unsigned long)val);
+static inline std::string PS3_ToString(double val) {
+    char buffer[64];
+    int len = ::snprintf(buffer, sizeof(buffer), "%.6g", val);
     if (len >= 0 && len < (int)sizeof(buffer)) {
         return std::string(buffer, len);
     }
@@ -93,9 +138,13 @@ static inline float PS3_Stof(const std::string& str, size_t* idx = nullptr) {
 // This technique avoids needing to #ifdef every call site.
 namespace std {
     inline std::string to_string(int val) { return ::PS3_ToString(val); }
+    inline std::string to_string(unsigned int val) { return ::PS3_ToString(val); }
+    inline std::string to_string(long val) { return ::PS3_ToString(val); }
+    inline std::string to_string(unsigned long val) { return ::PS3_ToString(val); }
+    inline std::string to_string(long long val) { return ::PS3_ToString(val); }
+    inline std::string to_string(unsigned long long val) { return ::PS3_ToString(val); }
     inline std::string to_string(float val) { return ::PS3_ToString(val); }
-    inline std::string to_string(size_t val) { return ::PS3_ToString(val); }
-    // Add other overloads if they become necessary based on compiler errors (e.g., long, unsigned long)
+    inline std::string to_string(double val) { return ::PS3_ToString(val); }
 
     inline int stoi(const std::string& str, size_t* idx = nullptr, int base = 10) { return ::PS3_Stoi(str, idx, base); }
     inline long stol(const std::string& str, size_t* idx = nullptr, int base = 10) { return ::PS3_Stol(str, idx, base); }

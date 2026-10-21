@@ -134,8 +134,6 @@ static inline float PS3_Stof(const std::string& str, size_t* idx = nullptr) {
 #undef stof
 #undef stod
 
-// Define std::to_string, std::stoi etc. to be our PS3 versions *within this block*
-// This technique avoids needing to #ifdef every call site.
 namespace std {
     inline std::string to_string(int val) { return ::PS3_ToString(val); }
     inline std::string to_string(unsigned int val) { return ::PS3_ToString(val); }

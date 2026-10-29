@@ -1173,7 +1173,7 @@ void RSDK::DevMenu_VideoOptionsMenu()
 }
 void RSDK::DevMenu_AudioOptionsMenu()
 {
-    uint32 selectionColors[]           = { 0x808090, 0x808090, 0x808090, 0x808090 };
+    uint32 selectionColors[]           = { 0x808090, 0x808090, 0x808090, 0x808090, 0x808090 };
     selectionColors[devMenu.selection] = 0xF0F0F0;
 
     int32 dy = currentScreen->center.y;
@@ -1183,7 +1183,7 @@ void RSDK::DevMenu_AudioOptionsMenu()
     DrawDevString("AUDIO SETTINGS", currentScreen->center.x, dy, ALIGN_CENTER, 0xF0F0F0);
 
     dy += 44;
-    DrawRectangle(currentScreen->center.x - 128, dy - 8, 0x100, 0x48, 0x80, 0xFF, INK_NONE, true);
+    DrawRectangle(currentScreen->center.x - 128, dy - 8, 0x100, 0x58, 0x80, 0xFF, INK_NONE, true);
 
     DrawDevString("Streams Enabled:", currentScreen->center.x - 96, dy, 0, selectionColors[0]);
     DrawDevString(engine.streamsEnabled ? "YES" : "NO", currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
@@ -1197,17 +1197,25 @@ void RSDK::DevMenu_AudioOptionsMenu()
     DrawDevString("SoundFX Vol:", currentScreen->center.x - 96, dy, 0, selectionColors[2]);
     DrawRectangle(currentScreen->center.x + 8, dy, 112, 8, 0x000000, 0xFF, INK_NONE, true);
     DrawRectangle(currentScreen->center.x + 9, dy + 1, (int32)(engine.soundFXVolume * 110.0), 6, 0xF0F0F0, 255, INK_NONE, true);
-    DrawDevString("Back", currentScreen->center.x, dy + 16, ALIGN_CENTER, selectionColors[3]);
+
+    dy += 16;
+    const char *vapePlusStrings[] = { "0.75x", "1x", "1.25x" };
+    int32 speedIdx = (engine.bgmSpeed >= 0 && engine.bgmSpeed <= 2) ? engine.bgmSpeed : 1;
+    DrawDevString("Vape Plus:", currentScreen->center.x - 96, dy, 0, selectionColors[3]);
+    DrawDevString(vapePlusStrings[speedIdx], currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
+
+    DrawDevString("Back", currentScreen->center.x, dy + 16, ALIGN_CENTER, selectionColors[4]);
 
 #if !RETRO_USE_ORIGINAL_CODE
     int8 cornerButton = CORNERBUTTON_START;
     switch (devMenu.selection) {
-        case 0: cornerButton = CORNERBUTTON_LEFTRIGHT; break;
+        case 0:
+        case 3: cornerButton = CORNERBUTTON_LEFTRIGHT; break;
 
         case 1:
         case 2: cornerButton = CORNERBUTTON_SLIDER; break;
 
-        case 3: cornerButton = CORNERBUTTON_START; break;
+        case 4: cornerButton = CORNERBUTTON_START; break;
     }
 
     DevMenu_HandleTouchControls(cornerButton);
@@ -1215,25 +1223,25 @@ void RSDK::DevMenu_AudioOptionsMenu()
 
     if (controller[CONT_ANY].keyUp.press) {
         if (--devMenu.selection < 0)
-            devMenu.selection = 3;
+            devMenu.selection = 4;
 
         devMenu.timer = 1;
     }
     else if (controller[CONT_ANY].keyUp.down) {
         if (!devMenu.timer && --devMenu.selection < 0)
-            devMenu.selection = 3;
+            devMenu.selection = 4;
 
         devMenu.timer = (devMenu.timer + 1) & 7;
     }
 
     if (controller[CONT_ANY].keyDown.press) {
-        if (++devMenu.selection > 3)
+        if (++devMenu.selection > 4)
             devMenu.selection = 0;
 
         devMenu.timer = 1;
     }
     else if (controller[CONT_ANY].keyDown.down) {
-        if (!devMenu.timer && ++devMenu.selection > 3)
+        if (!devMenu.timer && ++devMenu.selection > 4)
             devMenu.selection = 0;
 
         devMenu.timer = (devMenu.timer + 1) & 7;
@@ -1285,7 +1293,32 @@ void RSDK::DevMenu_AudioOptionsMenu()
             }
             break;
 
-        case 3: {
+        case 3:
+            if (controller[CONT_ANY].keyLeft.press) {
+                if (--engine.bgmSpeed < 0)
+                    engine.bgmSpeed = 2;
+                changedVideoSettings = true;
+                float bgmSpeeds[] = { 0.75f, 1.0f, 1.25f };
+                for (int32 c = 0; c < CHANNEL_COUNT; ++c) {
+                    if (channels[c].state == CHANNEL_STREAM || channels[c].state == (CHANNEL_STREAM | CHANNEL_PAUSED) || channels[c].state == CHANNEL_LOADING_STREAM) {
+                        channels[c].speed = (int32)(bgmSpeeds[engine.bgmSpeed] * TO_FIXED(1));
+                    }
+                }
+            }
+            else if (controller[CONT_ANY].keyRight.press) {
+                if (++engine.bgmSpeed > 2)
+                    engine.bgmSpeed = 0;
+                changedVideoSettings = true;
+                float bgmSpeeds[] = { 0.75f, 1.0f, 1.25f };
+                for (int32 c = 0; c < CHANNEL_COUNT; ++c) {
+                    if (channels[c].state == CHANNEL_STREAM || channels[c].state == (CHANNEL_STREAM | CHANNEL_PAUSED) || channels[c].state == CHANNEL_LOADING_STREAM) {
+                        channels[c].speed = (int32)(bgmSpeeds[engine.bgmSpeed] * TO_FIXED(1));
+                    }
+                }
+            }
+            break;
+
+        case 4: {
             bool32 confirm = controller[CONT_ANY].keyA.press;
 #if RETRO_REV02
             if (SKU::userCore->GetConfirmButtonFlip())

@@ -374,6 +374,7 @@ void RSDK::LoadSettingsINI()
         engine.streamsEnabled = iniparser_getboolean(ini, "Audio:streamsEnabled", true);
         engine.streamVolume   = (float)iniparser_getdouble(ini, "Audio:streamVolume", 0.8);
         engine.soundFXVolume  = (float)iniparser_getdouble(ini, "Audio:sfxVolume", 1.0);
+        engine.bgmSpeed       = iniparser_getint(ini, "Audio:bgmSpeed", 1);
 
         for (int32 i = CONT_P1; i <= PLAYER_COUNT; ++i) {
             char buffer[0x30];
@@ -516,6 +517,7 @@ void RSDK::LoadSettingsINI()
         engine.streamsEnabled = true;
         engine.streamVolume   = 1.0f;
         engine.soundFXVolume  = 1.0f;
+        engine.bgmSpeed       = 1;
         engine.devMenu        = false;
 
 #if !RETRO_USE_ORIGINAL_CODE
@@ -682,6 +684,7 @@ void RSDK::SaveSettingsINI(bool32 writeToFile)
         WriteText(file, "streamsEnabled=%s\n", (engine.streamsEnabled ? "y" : "n"));
         WriteText(file, "streamVolume=%f\n", engine.streamVolume);
         WriteText(file, "sfxVolume=%f\n", engine.soundFXVolume);
+        WriteText(file, "bgmSpeed=%d\n", engine.bgmSpeed);
 
         // ==========================
         // OPTIONS (decomp only)

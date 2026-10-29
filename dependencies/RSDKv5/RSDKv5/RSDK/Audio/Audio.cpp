@@ -306,7 +306,9 @@ int32 RSDK::PlayStream(const char *filename, uint32 slot, uint32 startPos, uint3
     channel->sampleLength = sfxList[SFX_COUNT - 1].length;
     channel->samplePtr    = sfxList[SFX_COUNT - 1].buffer;
     channel->bufferPos    = 0;
-    channel->speed        = TO_FIXED(1);
+    float bgmSpeeds[]     = { 0.75f, 1.0f, 1.25f };
+    int32 speedIdx        = (engine.bgmSpeed >= 0 && engine.bgmSpeed <= 2) ? engine.bgmSpeed : 1;
+    channel->speed        = (int32)(bgmSpeeds[speedIdx] * TO_FIXED(1));
 
     sprintf_s(streamFilePath, sizeof(streamFilePath), "Data/Music/%s", filename);
     streamStartPos  = startPos;

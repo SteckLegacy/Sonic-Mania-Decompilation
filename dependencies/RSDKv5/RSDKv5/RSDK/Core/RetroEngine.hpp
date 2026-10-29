@@ -769,6 +769,7 @@ struct RetroEngine {
     bool32 streamsEnabled = true;
     float streamVolume    = 1.0f;
     float soundFXVolume   = 1.0f;
+    int32 bgmSpeed        = 1;
 };
 
 extern RetroEngine engine;

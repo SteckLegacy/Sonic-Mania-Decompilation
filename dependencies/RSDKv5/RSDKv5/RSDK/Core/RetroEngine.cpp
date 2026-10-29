@@ -1518,3 +1518,92 @@ void RSDK::SendQuitMsg()
     PostQuitMessage(0);
 #endif
 }
+
+#if RETRO_PLATFORM == RETRO_PS3
+bool RSDK::PS3_GetActualPath(const std::string &path, std::string &actualPath)
+{
+    if (path.empty()) {
+        actualPath = "";
+        return false;
+    }
+
+    std::string normPath = path;
+    for (size_t i = 0; i < normPath.length(); ++i) {
+        if (normPath[i] == '\\')
+            normPath[i] = '/';
+    }
+
+    std::string currentPath = "";
+    size_t start = 0;
+    if (normPath[0] == '/') {
+        currentPath = "/";
+        start = 1;
+    }
+
+    size_t pos = start;
+    while (pos < normPath.length()) {
+        size_t nextPos = normPath.find('/', pos);
+        std::string component;
+        if (nextPos == std::string::npos) {
+            component = normPath.substr(pos);
+            pos = normPath.length();
+        }
+        else {
+            component = normPath.substr(pos, nextPos - pos);
+            pos = nextPos + 1;
+        }
+
+        if (component.empty() || component == ".") {
+            continue;
+        }
+
+        if (component == "..") {
+            if (!currentPath.empty() && currentPath.back() != '/')
+                currentPath += "/..";
+            else
+                currentPath += "..";
+            continue;
+        }
+
+        std::string dirToOpen = currentPath.empty() ? "." : currentPath;
+        DIR *dir = opendir(dirToOpen.c_str());
+        if (!dir) {
+            if (!currentPath.empty() && currentPath.back() != '/')
+                currentPath += "/" + component;
+            else
+                currentPath += component;
+            continue;
+        }
+
+        bool matched = false;
+        std::string matchedName = component;
+        struct dirent *entry = NULL;
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcasecmp(entry->d_name, component.c_str()) == 0) {
+                matchedName = entry->d_name;
+                matched = true;
+                break;
+            }
+        }
+        closedir(dir);
+
+        if (!currentPath.empty() && currentPath.back() != '/')
+            currentPath += "/" + matchedName;
+        else if (currentPath == "/")
+            currentPath += matchedName;
+        else
+            currentPath = matchedName;
+    }
+
+    actualPath = currentPath;
+    return true;
+}
+
+std::string RSDK::PS3_GetActualPath(const std::string &path)
+{
+    std::string actualPath;
+    if (PS3_GetActualPath(path, actualPath))
+        return actualPath;
+    return path;
+}
+#endif

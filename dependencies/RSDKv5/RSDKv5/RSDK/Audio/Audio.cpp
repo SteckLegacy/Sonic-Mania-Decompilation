@@ -214,14 +214,25 @@ void RSDK::LoadStream(ChannelInfo *channel)
     if (channel->state != CHANNEL_LOADING_STREAM)
         return;
 
-    stb_vorbis_close(vorbisInfo);
+    if (vorbisInfo) {
+        stb_vorbis_close(vorbisInfo);
+        vorbisInfo = NULL;
+    }
+
+    if (streamBuffer) {
+        RemoveStorageEntry((void **)&streamBuffer);
+        streamBuffer = NULL;
+    }
+    if (vorbisAlloc.alloc_buffer) {
+        RemoveStorageEntry((void **)&vorbisAlloc.alloc_buffer);
+        vorbisAlloc.alloc_buffer = NULL;
+    }
 
     FileInfo info;
     InitFileInfo(&info);
 
     if (LoadFile(&info, streamFilePath, FMODE_RB)) {
         streamBufferSize = info.fileSize;
-        streamBuffer     = NULL;
         AllocateStorage((void **)&streamBuffer, info.fileSize, DATASET_MUS, false);
         ReadBytes(&info, streamBuffer, streamBufferSize);
         CloseFile(&info);
@@ -241,8 +252,17 @@ void RSDK::LoadStream(ChannelInfo *channel)
         }
     }
 
-    if (channel->state == CHANNEL_LOADING_STREAM)
+    if (channel->state == CHANNEL_LOADING_STREAM) {
+        if (vorbisAlloc.alloc_buffer) {
+            RemoveStorageEntry((void **)&vorbisAlloc.alloc_buffer);
+            vorbisAlloc.alloc_buffer = NULL;
+        }
+        if (streamBuffer) {
+            RemoveStorageEntry((void **)&streamBuffer);
+            streamBuffer = NULL;
+        }
         channel->state = CHANNEL_IDLE;
+    }
 }
 
 int32 RSDK::PlayStream(const char *filename, uint32 slot, uint32 startPos, uint32 loopPoint, bool32 loadASync)

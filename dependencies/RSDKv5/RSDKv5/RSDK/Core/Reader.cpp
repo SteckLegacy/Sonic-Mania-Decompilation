@@ -280,6 +280,10 @@ bool32 RSDK::LoadFile(FileInfo *info, const char *filename, uint8 fileMode)
                 if (std::find(modList[m].excludedFiles.begin(), modList[m].excludedFiles.end(), pathLower) == modList[m].excludedFiles.end()) {
                     strcpy(fullFilePath, iter->second.c_str());
                     info->externalFile = true;
+#if RETRO_PLATFORM == RETRO_PS3
+                    std::string resolved = PS3_GetActualPath(fullFilePath);
+                    StrCopy(fullFilePath, resolved.c_str());
+#endif
                     break;
                 }
                 else {

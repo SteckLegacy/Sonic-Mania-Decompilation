@@ -840,6 +840,16 @@ inline void RegisterGlobalVariables(void **globals, int32 size)
 
 // Some misc API stuff that needs a home
 
+#if RETRO_PLATFORM == RETRO_PS3
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <string>
+
+bool PS3_GetActualPath(const std::string &path, std::string &actualPath);
+std::string PS3_GetActualPath(const std::string &path);
+#endif
+
 // Used to Init API stuff that should be done regardless of Render/Audio/Input device APIs
 void InitCoreAPI();
 void ReleaseCoreAPI();

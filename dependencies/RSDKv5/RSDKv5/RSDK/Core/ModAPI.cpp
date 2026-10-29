@@ -87,7 +87,7 @@ static bool PS3_ListDirectory(const std::string& path, std::vector<std::pair<std
 static bool PS3_ListDirectoryRecursive(
     const std::string& basePath,
     const std::string& currentRelPath,
-    std::vector<std::string>& foundFilePaths
+    std::vector<std::pair<std::string, std::string>>& foundFilePaths
 ) {
     RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_FS_PS3] RecursiveScan START: Path='%s', RelPath='%s'", basePath.c_str(), currentRelPath.c_str());
     std::string currentAbsolutePath = basePath;
@@ -127,8 +127,8 @@ static bool PS3_ListDirectoryRecursive(
                 std::string normalizedPath = entryRelativePath;
                 std::transform(normalizedPath.begin(), normalizedPath.end(), normalizedPath.begin(),
                                 [](unsigned char c) { return c == '\\' ? '/' : std::tolower(c); });
-                foundFilePaths.push_back(normalizedPath);
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_FS_PS3]       Added file: '%s'", normalizedPath.c_str());
+                foundFilePaths.push_back(std::make_pair(normalizedPath, entryRelativePath));
+                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_FS_PS3]       Added file: Key='%s', Value='%s'", normalizedPath.c_str(), entryRelativePath.c_str());
             }
         } else {
             RSDK::PrintLog(RSDK::PRINT_ERROR, "[MODS] PS3_ListDirectoryRecursive: Cannot stat file/directory: %s", entryAbsolutePath.c_str());
@@ -580,8 +580,12 @@ bool32 RSDK::ScanModFolder(ModInfo *info, const char *targetFile, bool32 fromLoa
     }
 #else // PS3 or older GCC path
     if (targetFile) {
-        if (PS3_PathExists(modDir + "/" + targetFileStr)) {
-            info->fileMap.insert(std::pair<std::string, std::string>(targetFileStr, modDir + "/" + targetFileStr));
+        std::string actualTargetFile = modDir + "/" + targetFileStr;
+#if RETRO_PLATFORM == RETRO_PS3
+        actualTargetFile = PS3_GetActualPath(modDir + "/" + targetFile);
+#endif
+        if (PS3_PathExists(actualTargetFile) || PS3_PathExists(modDir + "/" + targetFileStr)) {
+            info->fileMap.insert(std::pair<std::string, std::string>(targetFileStr, actualTargetFile));
             return true;
         }
         else
@@ -598,7 +602,7 @@ bool32 RSDK::ScanModFolder(ModInfo *info, const char *targetFile, bool32 fromLoa
             RenderDevice::FlipScreen();
         }
 
-        std::vector<std::string> foundFiles;
+        std::vector<std::pair<std::string, std::string>> foundFiles;
         RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_SCAN] Scanning mod folder (PS3): Mod='%s', DataPath='%s'", info->id.c_str(), dataPathStr.c_str());
         // dataPathStr here is the mod's specific data folder, e.g., "mods/MyMod/Data"
         // Pass dataPathStr as basePath, and an empty string for currentRelPath to start.
@@ -609,21 +613,18 @@ bool32 RSDK::ScanModFolder(ModInfo *info, const char *targetFile, bool32 fromLoa
                 RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_SCAN]   No files found by PS3_ListDirectoryRecursive for mod '%s'. Skipping fileMap population.", info->id.c_str());
             }
 
-            for (const std::string& relativeFilePath : foundFiles) {
+            for (const auto& filePair : foundFiles) {
                 count++;
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d] Loop entry for: '%s'", count, (int)foundFiles.size(), relativeFilePath.c_str());
+                const std::string& relativeFilePathLower = filePair.first;
+                const std::string& relativeFilePathActual = filePair.second;
+                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d] Loop entry for: '%s'", count, (int)foundFiles.size(), relativeFilePathLower.c_str());
 
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]   Creating fullPathToModFile for '%s'...", count, (int)foundFiles.size(), relativeFilePath.c_str());
-                std::string fullPathToModFile = dataPathStr + "/" + relativeFilePath;
+                std::string fullPathToModFile = dataPathStr + "/" + relativeFilePathActual;
                 RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]     fullPathToModFile created: '%s'", count, (int)foundFiles.size(), fullPathToModFile.c_str());
                 
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]   Preparing pair for: '%s'", count, (int)foundFiles.size(), relativeFilePath.c_str());
-                std::pair<std::string, std::string> mapEntry(relativeFilePath, fullPathToModFile);
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]     Pair created. Key: '%s', Value: '%s'", count, (int)foundFiles.size(), mapEntry.first.c_str(), mapEntry.second.c_str());
-                
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]   Attempting map.insert for: '%s'", count, (int)foundFiles.size(), relativeFilePath.c_str());
+                std::pair<std::string, std::string> mapEntry(relativeFilePathLower, fullPathToModFile);
                 info->fileMap.insert(mapEntry);
-                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]   Map.insert successful for: '%s'", count, (int)foundFiles.size(), relativeFilePath.c_str());
+                RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_MAP][%d/%d]   Map.insert successful for: '%s' -> '%s'", count, (int)foundFiles.size(), relativeFilePathLower.c_str(), fullPathToModFile.c_str());
             }
             RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MODS_SCAN]   Finished populating fileMap for mod '%s'. Processed %d file(s).", info->id.c_str(), count);
         } else {
@@ -799,6 +800,9 @@ void RSDK::LoadMods(bool newOnly, bool32 getVersion)
     if (PS3_PathExists(modPathStr) && PS3_IsDirectory(modPathStr)) {
         RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MOD_FLOW] LoadMods: Processing modconfig.ini entries...");
         string mod_config_path = modPathStr + "/modconfig.ini";
+#if RETRO_PLATFORM == RETRO_PS3
+        mod_config_path = PS3_GetActualPath(mod_config_path);
+#endif
         FileIO *configFile = fOpen(mod_config_path.c_str(), "r");
         if (configFile) {
             fClose(configFile);
@@ -928,7 +932,12 @@ bool32 RSDK::LoadMod(ModInfo *info, const std::string &modsPath, const std::stri
 
     const std::string modDir = modsPath + "/" + folder;
 
-    FileIO *f = fOpen((modDir + "/mod.ini").c_str(), "r");
+    std::string modIniPath = modDir + "/mod.ini";
+#if RETRO_PLATFORM == RETRO_PS3
+    modIniPath = PS3_GetActualPath(modIniPath);
+#endif
+
+    FileIO *f = fOpen(modIniPath.c_str(), "r");
     if (f) {
         int32 dy = currentScreen->center.y - 32;
         DrawRectangle(currentScreen->center.x - 128, dy, 0x100, 0x48, 0x80, 0xFF, INK_NONE, true);
@@ -939,7 +948,7 @@ bool32 RSDK::LoadMod(ModInfo *info, const std::string &modsPath, const std::stri
         DrawStatus("Parsing INI...");
 
         fClose(f);
-        auto modIni = iniparser_load((modDir + "/mod.ini").c_str());
+        auto modIni = iniparser_load(modIniPath.c_str());
 
         info->path       = modDir;
         info->folderName = folder;
@@ -1057,13 +1066,17 @@ bool32 RSDK::LoadMod(ModInfo *info, const std::string &modsPath, const std::stri
 
             RSDK::PrintLog(RSDK::PRINT_NORMAL, "[MOD_FLOW] LoadMod: Processing SETTINGS section for mod '%s'.", info->id.c_str());
             // SETTINGS
-            FileIO *set = fOpen((modDir + "/modSettings.ini").c_str(), "r");
+            std::string modSettingsPath = modDir + "/modSettings.ini";
+#if RETRO_PLATFORM == RETRO_PS3
+            modSettingsPath = PS3_GetActualPath(modSettingsPath);
+#endif
+            FileIO *set = fOpen(modSettingsPath.c_str(), "r");
             if (set) {
                 DrawStatus("Reading settings...");
 
                 fClose(set);
                 using namespace std;
-                auto modSettingsIni = iniparser_load((modDir + "/modSettings.ini").c_str());
+                auto modSettingsIni = iniparser_load(modSettingsPath.c_str());
                 int32 sec           = iniparser_getnsec(modSettingsIni);
                 if (sec) {
                     for (int32 i = 0; i < sec; ++i) {

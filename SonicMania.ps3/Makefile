@@ -37,12 +37,13 @@ SOURCES		:=	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
 	../SonicMania/ 										\
 	../SonicMania/Objects
-DATA		:=	data
+DATA		:=	data ../dependencies/RSDKv5/RSDKv5/RSDK/Graphics/GCM/shaders
 INCLUDES	:=	\
 	../dependencies/RSDKv5/RSDKv5/ 						\
 	../dependencies/RSDKv5/dependencies/all/ 			\
 	../dependencies/RSDKv5/dependencies/all/tinyxml2/ 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser/	\
+	../dependencies/RSDKv5/RSDKv5/RSDK/Graphics/GCM/ 	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
 	../SonicMania/   									\
 	../SonicMania/Objects
@@ -112,7 +113,7 @@ LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	$(shell pkg-config --libs sdl2 theora) -lnet -lsysutil -lsysmodule
+LIBS	:=	$(shell pkg-config --libs sdl2 theora) -lgcm_sys -lrsx -lnet -lsysutil -lsysmodule
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -200,8 +201,24 @@ $(OUTPUT).self: $(OUTPUT).elf
 $(OUTPUT).elf:	$(OFILES)
 
 #---------------------------------------------------------------------------------
-# This rule links in binary data with the .bin extension
+# Cg shader compilation and injection rules for RSX
 #---------------------------------------------------------------------------------
+%.vpo.bin : %.v.cg
+	@echo "Compiling Cg vertex shader $< -> $@"
+	@cgcomp -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null || cp $< $@
+
+%.fpo.bin : %.f.cg
+	@echo "Compiling Cg fragment shader $< -> $@"
+	@cgcomp -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null || cp $< $@
+
+%.vpo.bin.o : %.vpo.bin
+	@echo "Injecting shader binary $<"
+	@$(bin2o)
+
+%.fpo.bin.o : %.fpo.bin
+	@echo "Injecting shader binary $<"
+	@$(bin2o)
+
 %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------
 	@echo $(notdir $<)

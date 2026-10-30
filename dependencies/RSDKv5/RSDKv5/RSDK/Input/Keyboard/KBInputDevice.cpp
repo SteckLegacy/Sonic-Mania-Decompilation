@@ -807,7 +807,7 @@ void RSDK::SKU::InitKeyboardInputAPI()
 
 void RSDK::SKU::UpdateKeyState(int32 keyCode)
 {
-#if RETRO_RENDERDEVICE_SDL2
+#if RETRO_RENDERDEVICE_SDL2 || RETRO_INPUTDEVICE_SDL2
     keyCode = SDLToWinAPIMappings(keyCode);
 #elif RETRO_INPUTDEVICE_GLFW
     keyCode = GLFWToWinAPIMappings(keyCode);
@@ -840,7 +840,7 @@ void RSDK::SKU::UpdateKeyState(int32 keyCode)
 
 void RSDK::SKU::ClearKeyState(int32 keyCode)
 {
-#if RETRO_RENDERDEVICE_SDL2
+#if RETRO_RENDERDEVICE_SDL2 || RETRO_INPUTDEVICE_SDL2
     keyCode = SDLToWinAPIMappings(keyCode);
 #elif RETRO_INPUTDEVICE_GLFW
     keyCode = GLFWToWinAPIMappings(keyCode);

@@ -1,0 +1,8 @@
+struct FS_INPUT {
+    float4 color    : COLOR0;
+    float2 texcoord : TEXCOORD0;
+};
+
+float4 main(FS_INPUT input, uniform sampler2D textureMap : TEXUNIT0) : COLOR {
+    return tex2D(textureMap, input.texcoord) * input.color;
+}

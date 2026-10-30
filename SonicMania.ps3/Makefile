@@ -209,11 +209,11 @@ $(OUTPUT).elf:	$(OFILES)
 #---------------------------------------------------------------------------------
 %.vpo : %.v.cg
 	@echo "Compiling Cg vertex shader $< -> $@"
-	@cgcomp -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null || cp $< $@
+	@cgcomp -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null
 
 %.fpo : %.f.cg
 	@echo "Compiling Cg fragment shader $< -> $@"
-	@cgcomp -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null || cp $< $@
+	@cgcomp -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null
 
 %.vpo.s : %.vpo
 	@echo "Converting $< -> $@"

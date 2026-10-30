@@ -7,9 +7,6 @@
 #include <rsx/rsx.h>
 #endif
 
-namespace RSDK
-{
-
 struct RenderVertex {
     float x, y, z;
     uint32 color;
@@ -105,7 +102,5 @@ struct ShaderEntry : public ShaderEntryBase {
     void *fragmentProgram;
     uint32 fragmentOffset;
 };
-
-} // namespace RSDK
 
 #endif // GCMRENDERDEVICE_HPP

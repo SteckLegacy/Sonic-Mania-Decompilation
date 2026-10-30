@@ -678,6 +678,14 @@ extern "C" {
 #endif
 #endif
 
+#if RETRO_PLATFORM == RETRO_PS3
+#include <sysutil/video.h>
+#if RETRO_RENDERDEVICE_GCM
+#include <rsx/gcm_sys.h>
+#include <rsx/rsx.h>
+#endif
+#endif
+
 #include <theora/theoradec.h>
 
 // ============================

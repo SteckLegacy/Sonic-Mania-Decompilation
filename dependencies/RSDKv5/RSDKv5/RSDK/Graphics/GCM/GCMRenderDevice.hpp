@@ -1,12 +1,6 @@
 #ifndef GCMRENDERDEVICE_HPP
 #define GCMRENDERDEVICE_HPP
 
-#if RETRO_PLATFORM == RETRO_PS3
-#include <sysutil/video.h>
-#include <rsx/gcm_sys.h>
-#include <rsx/rsx.h>
-#endif
-
 struct RenderVertex {
     float x, y, z;
     uint32 color;

@@ -9,6 +9,10 @@ endif
 
 include $(PSL1GHT)/ppu_rules
 
+export CGCOMP  := cgcomp
+export BIN2S   := bin2s
+export PPU_GCC := ppu-gcc
+
 #---------------------------------------------------------------------------------
 # TARGET is the name of the output
 # BUILD is the directory where object files & intermediate files will be placed
@@ -209,27 +213,27 @@ $(OUTPUT).elf:	$(OFILES)
 #---------------------------------------------------------------------------------
 %.vpo : %.v.cg
 	@echo "Compiling Cg vertex shader $< -> $@"
-	@cgcomp -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null
+	@$(CGCOMP) -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null
 
 %.fpo : %.f.cg
 	@echo "Compiling Cg fragment shader $< -> $@"
-	@cgcomp -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null
+	@$(CGCOMP) -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null
 
 %.vpo.s : %.vpo
 	@echo "Converting $< -> $@"
-	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+	@$(BIN2S) -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
 
 %.fpo.s : %.fpo
 	@echo "Converting $< -> $@"
-	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+	@$(BIN2S) -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
 
 %.vpo.s.o : %.vpo.s
 	@echo "Assembling $< -> $@"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(PPU_GCC) $(CFLAGS) -c $< -o $@ || $(CC) $(CFLAGS) -c $< -o $@
 
 %.fpo.s.o : %.fpo.s
 	@echo "Assembling $< -> $@"
-	@$(CC) $(CFLAGS) -c $< -o $@
+	@$(PPU_GCC) $(CFLAGS) -c $< -o $@ || $(CC) $(CFLAGS) -c $< -o $@
 
 %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------

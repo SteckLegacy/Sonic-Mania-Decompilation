@@ -1,12 +1,6 @@
 #ifndef GCMRENDERDEVICE_HPP
 #define GCMRENDERDEVICE_HPP
 
-struct RenderVertex {
-    float x, y, z;
-    uint32 color;
-    float u, v;
-};
-
 class RenderDevice : public RenderDeviceBase
 {
 public:

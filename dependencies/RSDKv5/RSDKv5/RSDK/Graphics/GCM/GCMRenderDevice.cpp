@@ -229,13 +229,13 @@ void RenderDevice::InitVertexBuffer()
 {
     // Initialize default quad vertices for fullscreen rendering
     RenderVertex vertices[6] = {
-        {-1.0f,  1.0f, 0.0f, 0xFFFFFFFF, 0.0f, 0.0f},
-        { 1.0f,  1.0f, 0.0f, 0xFFFFFFFF, 1.0f, 0.0f},
-        {-1.0f, -1.0f, 0.0f, 0xFFFFFFFF, 0.0f, 1.0f},
+        {{-1.0f,  1.0f, 0.0f}, 0xFFFFFFFF, {0.0f, 0.0f}},
+        {{ 1.0f,  1.0f, 0.0f}, 0xFFFFFFFF, {1.0f, 0.0f}},
+        {{-1.0f, -1.0f, 0.0f}, 0xFFFFFFFF, {0.0f, 1.0f}},
 
-        {-1.0f, -1.0f, 0.0f, 0xFFFFFFFF, 0.0f, 1.0f},
-        { 1.0f,  1.0f, 0.0f, 0xFFFFFFFF, 1.0f, 0.0f},
-        { 1.0f, -1.0f, 0.0f, 0xFFFFFFFF, 1.0f, 1.0f},
+        {{-1.0f, -1.0f, 0.0f}, 0xFFFFFFFF, {0.0f, 1.0f}},
+        {{ 1.0f,  1.0f, 0.0f}, 0xFFFFFFFF, {1.0f, 0.0f}},
+        {{ 1.0f, -1.0f, 0.0f}, 0xFFFFFFFF, {1.0f, 1.0f}},
     };
 
     memcpy(vertexBuffer, vertices, sizeof(vertices));

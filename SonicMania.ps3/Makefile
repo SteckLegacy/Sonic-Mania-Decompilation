@@ -144,7 +144,11 @@ CFILES		:=	$(foreach dir,$(SOURCES),$(notdir ${wildcard $(dir)/*.c}))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(subst xmltest.cpp,,${wildcard $(dir)/*.cpp})))
 sFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.S)))
-BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
+BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.bin)))
+
+CG_VFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.v.cg)))
+CG_FFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.f.cg)))
+SHADER_OFILES	:=	$(CG_VFILES:.v.cg=.vpo.s.o) $(CG_FFILES:.f.cg=.fpo.s.o)
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
@@ -157,7 +161,7 @@ endif
 
 export OFILES	:=	$(addsuffix .o,$(BINFILES)) \
 					$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) \
-					$(sFILES:.s=.o) $(SFILES:.S=.o)
+					$(sFILES:.s=.o) $(SFILES:.S=.o) $(SHADER_OFILES)
 
 #---------------------------------------------------------------------------------
 # build a list of include paths
@@ -201,23 +205,31 @@ $(OUTPUT).self: $(OUTPUT).elf
 $(OUTPUT).elf:	$(OFILES)
 
 #---------------------------------------------------------------------------------
-# Cg shader compilation and injection rules for RSX
+# Explicit Cg shader compilation to .vpo/.fpo, bin2s to .s, and ppu-gcc to .o
 #---------------------------------------------------------------------------------
-%.vpo.bin : %.v.cg
+%.vpo : %.v.cg
 	@echo "Compiling Cg vertex shader $< -> $@"
 	@cgcomp -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null || cp $< $@
 
-%.fpo.bin : %.f.cg
+%.fpo : %.f.cg
 	@echo "Compiling Cg fragment shader $< -> $@"
 	@cgcomp -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null || cp $< $@
 
-%.vpo.bin.o : %.vpo.bin
-	@echo "Injecting shader binary $<"
-	@$(bin2o)
+%.vpo.s : %.vpo
+	@echo "Converting $< -> $@"
+	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
 
-%.fpo.bin.o : %.fpo.bin
-	@echo "Injecting shader binary $<"
-	@$(bin2o)
+%.fpo.s : %.fpo
+	@echo "Converting $< -> $@"
+	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+
+%.vpo.s.o : %.vpo.s
+	@echo "Assembling $< -> $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+%.fpo.s.o : %.fpo.s
+	@echo "Assembling $< -> $@"
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------

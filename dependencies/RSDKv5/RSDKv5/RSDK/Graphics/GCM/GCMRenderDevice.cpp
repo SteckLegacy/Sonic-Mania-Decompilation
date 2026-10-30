@@ -2,7 +2,7 @@
 
 // Compat wrappers / fallbacks for PS3 SDK / PSL1GHT function variations
 #ifndef cellVideoInit
-#define cellVideoInit videoInit
+#define cellVideoInit() ((void)0)
 #endif
 
 #ifndef cellVideoGetState
@@ -16,9 +16,9 @@
 #ifndef cellGcmInit
 #define cellGcmInit(cmd_size, io_size, io_addr) \
     do { \
-        static gcmContextData _ctx; \
+        static gcmContextData *_ctx = nullptr; \
         rsxInit(&_ctx, 0x10000, cmd_size, io_addr); \
-        RenderDevice::gcmContext = &_ctx; \
+        RenderDevice::gcmContext = _ctx; \
     } while (0)
 #endif
 
@@ -248,7 +248,7 @@ void RenderDevice::CopyFrameBuffer()
         return;
 
     uint32 *dst = (uint32 *)frameBufferLocalMem[currentBuffer];
-    uint16 *src = gfxSurface[0].pixels;
+    uint16 *src = (uint16 *)gfxSurface[0].pixels;
     int32 width = videoSettings.pixWidth;
     int32 height = videoSettings.pixHeight;
 

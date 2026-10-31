@@ -218,11 +218,11 @@ $(OUTPUT).elf:	$(OFILES)
 #---------------------------------------------------------------------------------
 %.vpo.s : %.vpo
 	@echo "Converting $< -> $@"
-	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+	@$(BIN2S) -a 16 $< > $@
 
 %.fpo.s : %.fpo
 	@echo "Converting $< -> $@"
-	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+	@$(BIN2S) -a 16 $< > $@
 
 %.vpo.s.o : %.vpo.s
 	@echo "Assembling $< -> $@"

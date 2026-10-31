@@ -72,6 +72,12 @@ public:
     static void *rsxFreeLocalMem;
     static uint32 rsxFreeLocalMemSize;
 
+    static const uint8 *vertexShaderBytes;
+    static uint32 vertexShaderSize;
+    static void *fragmentShaderLocalMem;
+    static uint32 fragmentShaderOffset;
+    static uint32 fragmentShaderSize;
+
     static uint64 targetFreq;
     static uint64 curTicks;
     static uint64 prevTicks;

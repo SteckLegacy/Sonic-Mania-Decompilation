@@ -134,7 +134,8 @@ ifneq ($(BUILD),$(notdir $(CURDIR)))
 export OUTPUT	:=	$(CURDIR)/$(TARGET)
 
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
-					$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+					$(foreach dir,$(DATA),$(CURDIR)/$(dir)) \
+					$(CURDIR)/$(SHADERS_DIR)
 
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
@@ -216,6 +217,9 @@ $(OUTPUT).elf:	$(OFILES)
 #---------------------------------------------------------------------------------
 # Explicit shader conversion from .vpo/.fpo using bin2s to .s and ppu-gcc to .o
 #---------------------------------------------------------------------------------
+vpath %.vpo $(CURDIR)/$(SHADERS_DIR)
+vpath %.fpo $(CURDIR)/$(SHADERS_DIR)
+
 %.vpo.s : %.vpo
 	@echo "Converting $< -> $@"
 	@$(BIN2S) -a 16 $< > $@

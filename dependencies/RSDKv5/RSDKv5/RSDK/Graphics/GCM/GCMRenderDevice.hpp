@@ -43,6 +43,16 @@ public:
     static bool InitShaders();
     static void LoadShader(const char *fileName, bool32 linear);
 
+    // GCM memory alignment helpers
+    inline static uint32 Align64(uint32 value) { return (value + 63) & ~63; }
+    inline static uint32 Align1024(uint32 value) { return (value + 1023) & ~1023; }
+    inline static uint32 Align64K(uint32 value) { return (value + 65535) & ~65535; }
+
+    // GCM memory allocation wrappers
+    static void *AllocLocalMemory(uint32 alignment, uint32 size);
+    static void FreeLocalMemory(void *ptr);
+    static bool AddressToOffset(void *addr, uint32 *offset);
+
     static void SetWindowTitle() {}
     static void ShowCursor(bool32 shown) {}
     static bool GetCursorPos(Vector2 *pos)
@@ -84,6 +94,7 @@ public:
 
     static const uint8 *vertexShaderBytes;
     static uint32 vertexShaderSize;
+    static const void *fragmentShaderHostDesc;
     static void *fragmentShaderLocalMem;
     static uint32 fragmentShaderOffset;
     static uint32 fragmentShaderSize;
@@ -99,7 +110,6 @@ private:
     static void InitVertexBuffer();
     static bool InitGraphicsAPI();
     static void GetDisplays();
-    static void SetRenderTarget();
 };
 
 struct ShaderEntry : public ShaderEntryBase {

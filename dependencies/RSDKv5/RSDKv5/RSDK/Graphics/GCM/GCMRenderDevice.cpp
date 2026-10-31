@@ -57,56 +57,40 @@
 #ifndef GCM_SURFACE_Z24S8
 #define GCM_SURFACE_Z24S8 (0x02)
 #endif
+#ifndef GCM_TEXTURE_FORMAT_A8R8G8B8
+#define GCM_TEXTURE_FORMAT_A8R8G8B8 (0x85)
+#endif
+#ifndef GCM_TEXTURE_MIPMAP
+#define GCM_TEXTURE_MIPMAP (1)
+#endif
+#ifndef GCM_TEXTURE_WRAP_CLAMP_TO_EDGE
+#define GCM_TEXTURE_WRAP_CLAMP_TO_EDGE (2)
+#endif
+#ifndef GCM_TEXTURE_FILTER_LINEAR
+#define GCM_TEXTURE_FILTER_LINEAR (2)
+#endif
+#ifndef GCM_TEXTURE_FILTER_NEAREST
+#define GCM_TEXTURE_FILTER_NEAREST (1)
+#endif
 #ifndef GCM_TYPE_TRIANGLES
 #define GCM_TYPE_TRIANGLES (4)
 #endif
 
-#ifndef gcmSetRenderTarget
-#define gcmSetRenderTarget(ctx, sf) ((void)0)
-#endif
-#ifndef gcmSetFragmentProgramOffset
-#define gcmSetFragmentProgramOffset(ctx, off, loc) ((void)0)
-#endif
-#ifndef gcmSetDrawArrays
-#define gcmSetDrawArrays(ctx, type, start, count) ((void)0)
-#endif
-#ifndef gcmSetViewport
-#define gcmSetViewport(ctx, x, y, w, h, minz, maxz, scale) ((void)0)
-#endif
-#ifndef gcmSetScissor
-#define gcmSetScissor(ctx, x, y, w, h) ((void)0)
-#endif
-
+#if RETRO_PLATFORM != RETRO_PS3
 #ifndef GCM_TRANSFER_LOCAL_TO_LOCAL
 #define GCM_TRANSFER_LOCAL_TO_LOCAL (0)
-#endif
-#ifndef GCM_TRANSFER_SURFACE
 #define GCM_TRANSFER_SURFACE (1)
-#endif
-#ifndef GCM_TRANSFER_CONVERSION_TRUNCATE
 #define GCM_TRANSFER_CONVERSION_TRUNCATE (0)
-#endif
-#ifndef GCM_TRANSFER_SCALE_FORMAT_A8R8G8B8
 #define GCM_TRANSFER_SCALE_FORMAT_A8R8G8B8 (0)
-#endif
-#ifndef GCM_TRANSFER_SURFACE_FORMAT_A8R8G8B8
 #define GCM_TRANSFER_SURFACE_FORMAT_A8R8G8B8 (1)
-#endif
-#ifndef GCM_TRANSFER_OPERATION_SRCCOPY
 #define GCM_TRANSFER_OPERATION_SRCCOPY (3)
-#endif
-#ifndef GCM_TRANSFER_ORIGIN_CORNER
 #define GCM_TRANSFER_ORIGIN_CORNER (0)
-#endif
-#ifndef GCM_TRANSFER_INTERPOLATOR_NEAREST
 #define GCM_TRANSFER_INTERPOLATOR_NEAREST (0)
-#endif
-#ifndef rsxSetTransferScaleMode
 #define rsxSetTransferScaleMode(ctx, mode, surf) ((void)0)
-#endif
-#ifndef rsxSetTransferScaleSurface
 #define rsxSetTransferScaleSurface(ctx, scale, surf) ((void)0)
 #endif
+#endif
+
 
 using namespace RSDK;
 
@@ -140,6 +124,7 @@ uint32 RenderDevice::rsxFreeLocalMemSize = 0;
 
 const uint8 *RenderDevice::vertexShaderBytes = nullptr;
 uint32 RenderDevice::vertexShaderSize = 0;
+const void *RenderDevice::fragmentShaderHostDesc = nullptr;
 void *RenderDevice::fragmentShaderLocalMem = nullptr;
 uint32 RenderDevice::fragmentShaderOffset = 0;
 uint32 RenderDevice::fragmentShaderSize = 0;
@@ -164,6 +149,43 @@ extern const uint8_t shader_fpo_end[] __attribute__((weak));
 // Fallback embedded Cg shader microcode buffer
 static uint32 cgVertexProgramUcode[64] __attribute__((aligned(16))) = {0};
 static uint32 cgFragmentProgramUcode[64] __attribute__((aligned(16))) = {0};
+
+void *RenderDevice::AllocLocalMemory(uint32 alignment, uint32 size)
+{
+    void *ptr = nullptr;
+    uint32 alignedSize = Align64(size);
+#if RETRO_PLATFORM == RETRO_PS3
+    ptr = rsxMemalign(alignment, alignedSize);
+    if (!ptr) {
+        ptr = rsxMemalign(64, alignedSize);
+    }
+#endif
+    if (!ptr) {
+        ptr = memalign(alignment, alignedSize);
+    }
+    if (ptr) {
+        memset(ptr, 0, alignedSize);
+    }
+    return ptr;
+}
+
+void RenderDevice::FreeLocalMemory(void *ptr)
+{
+    if (!ptr)
+        return;
+#if RETRO_PLATFORM == RETRO_PS3
+    rsxFree(ptr);
+#else
+    free(ptr);
+#endif
+}
+
+bool RenderDevice::AddressToOffset(void *addr, uint32 *offset)
+{
+    if (!addr || !offset)
+        return false;
+    return cellGcmAddressToOffset(addr, offset) == 0;
+}
 
 bool RenderDevice::InitGraphicsAPI()
 {
@@ -247,70 +269,37 @@ bool RenderDevice::InitGraphicsAPI()
     uint32 perBufferFbSize = (24 * 1024 * 1024) / 3; // 8 MB per buffer (24 MB total pool, 64KB aligned)
 
     for (int i = 0; i < 2; ++i) {
-#if RETRO_PLATFORM == RETRO_PS3
-        frameBufferLocalMem[i] = rsxMemalign(64 * 1024, perBufferFbSize);
-        if (!frameBufferLocalMem[i]) {
-            frameBufferLocalMem[i] = rsxMemalign(64, perBufferFbSize);
-        }
-        if (!frameBufferLocalMem[i]) {
-            frameBufferLocalMem[i] = memalign(64 * 1024, perBufferFbSize);
-        }
-#else
-        frameBufferLocalMem[i] = memalign(64 * 1024, perBufferFbSize);
-#endif
+        frameBufferLocalMem[i] = AllocLocalMemory(64 * 1024, perBufferFbSize);
         if (!frameBufferLocalMem[i]) {
             PrintLog(PRINT_NORMAL, "GCM: Failed to allocate 64KB-aligned RSX framebuffer %d.", i);
             return false;
         }
 
-        memset(frameBufferLocalMem[i], 0, perBufferFbSize);
-
-        if (cellGcmAddressToOffset(frameBufferLocalMem[i], &frameBufferOffset[i]) != 0) {
-            PrintLog(PRINT_NORMAL, "GCM: Failed to map framebuffer %d address to RSX offset.", i);
-        }
-
+        AddressToOffset(frameBufferLocalMem[i], &frameBufferOffset[i]);
         cellGcmSetDisplayBuffer(i, frameBufferOffset[i], frameBufferPitch, width, height);
     }
 
     // Allocate 32-bit Z-Buffer (Depth buffer) in RSX memory (8 MB)
-#if RETRO_PLATFORM == RETRO_PS3
-    depthBufferLocalMem = rsxMemalign(64 * 1024, perBufferFbSize);
-    if (!depthBufferLocalMem) {
-        depthBufferLocalMem = rsxMemalign(64, perBufferFbSize);
-    }
-    if (!depthBufferLocalMem) {
-        depthBufferLocalMem = memalign(64 * 1024, perBufferFbSize);
-    }
-#else
-    depthBufferLocalMem = memalign(64 * 1024, perBufferFbSize);
-#endif
+    depthBufferLocalMem = AllocLocalMemory(64 * 1024, perBufferFbSize);
     if (depthBufferLocalMem) {
-        memset(depthBufferLocalMem, 0, perBufferFbSize);
-        cellGcmAddressToOffset(depthBufferLocalMem, &depthBufferOffset);
+        AddressToOffset(depthBufferLocalMem, &depthBufferOffset);
     }
 
     // Allocate RSX vertex buffer memory
-#if RETRO_PLATFORM == RETRO_PS3
-    vertexBufferLocalMem = rsxMemalign(128, sizeof(RenderVertex) * 60);
-    if (!vertexBufferLocalMem) {
-        vertexBufferLocalMem = memalign(128, sizeof(RenderVertex) * 60);
-    }
+    vertexBufferLocalMem = AllocLocalMemory(128, sizeof(RenderVertex) * 60);
     if (vertexBufferLocalMem) {
-        memset(vertexBufferLocalMem, 0, sizeof(RenderVertex) * 60);
-        cellGcmAddressToOffset(vertexBufferLocalMem, &vertexBufferOffset);
+        AddressToOffset(vertexBufferLocalMem, &vertexBufferOffset);
     }
 
     // Allocate RSX screen textures
-    screenTexturePitch = (512 * 4 + 63) & ~63;
+    screenTexturePitch = Align64(512 * 4);
     uint32 screenTexSize = screenTexturePitch * 512;
     for (int s = 0; s < SCREEN_COUNT; ++s) {
-        screenTextureLocalMem[s] = rsxMemalign(64, screenTexSize);
+        screenTextureLocalMem[s] = AllocLocalMemory(64, screenTexSize);
         if (screenTextureLocalMem[s]) {
-            memset(screenTextureLocalMem[s], 0, screenTexSize);
-            cellGcmAddressToOffset(screenTextureLocalMem[s], &screenTextureOffset[s]);
+            AddressToOffset(screenTextureLocalMem[s], &screenTextureOffset[s]);
         }
     }
-#endif
 
     // Set remaining free RSX local memory pool (200 MB)
     rsxFreeLocalMemSize = 200 * 1024 * 1024;
@@ -325,18 +314,12 @@ bool RenderDevice::InitGraphicsAPI()
 
     const void *fShaderData = shader_fpo ? (const void *)shader_fpo : (const void *)cgFragmentProgramUcode;
     fragmentShaderSize = (shader_fpo && shader_fpo_end) ? (uint32)(shader_fpo_end - shader_fpo) : sizeof(cgFragmentProgramUcode);
+    fragmentShaderHostDesc = fShaderData;
 
-#if RETRO_PLATFORM == RETRO_PS3
-    fragmentShaderLocalMem = rsxMemalign(64, fragmentShaderSize);
-    if (!fragmentShaderLocalMem) {
-        fragmentShaderLocalMem = memalign(64, fragmentShaderSize);
-    }
-#else
-    fragmentShaderLocalMem = memalign(64, fragmentShaderSize);
-#endif
+    fragmentShaderLocalMem = AllocLocalMemory(64, fragmentShaderSize);
     if (fragmentShaderLocalMem) {
         memcpy(fragmentShaderLocalMem, fShaderData, fragmentShaderSize);
-        if (cellGcmAddressToOffset(fragmentShaderLocalMem, &fragmentShaderOffset) != 0) {
+        if (!AddressToOffset(fragmentShaderLocalMem, &fragmentShaderOffset)) {
             PrintLog(PRINT_NORMAL, "GCM: Failed to map Cg fragment program address to RSX offset.");
         }
     }
@@ -355,6 +338,7 @@ bool RenderDevice::Init()
         return false;
 
     InitVertexBuffer();
+    InitShaders();
 
     videoSettings.shaderSupport = true;
     videoSettings.screenCount = 1;
@@ -367,20 +351,30 @@ bool RenderDevice::Init()
 
 void RenderDevice::InitVertexBuffer()
 {
-    // Initialize default quad vertices for fullscreen rendering
-    RenderVertex vertices[6] = {
-        {{-1.0f,  1.0f, 0.0f}, 0xFFFFFFFF, {0.0f, 0.0f}},
-        {{ 1.0f,  1.0f, 0.0f}, 0xFFFFFFFF, {1.0f, 0.0f}},
-        {{-1.0f, -1.0f, 0.0f}, 0xFFFFFFFF, {0.0f, 1.0f}},
+    RenderVertex vertBuffer[sizeof(rsdkVertexBuffer) / sizeof(RenderVertex)];
+    memcpy(vertBuffer, rsdkVertexBuffer, sizeof(rsdkVertexBuffer));
 
-        {{-1.0f, -1.0f, 0.0f}, 0xFFFFFFFF, {0.0f, 1.0f}},
-        {{ 1.0f,  1.0f, 0.0f}, 0xFFFFFFFF, {1.0f, 0.0f}},
-        {{ 1.0f, -1.0f, 0.0f}, 0xFFFFFFFF, {1.0f, 1.0f}},
-    };
+    float viewW = videoSettings.fsWidth ? (float)videoSettings.fsWidth : 1280.0f;
+    float viewH = videoSettings.fsHeight ? (float)videoSettings.fsHeight : 720.0f;
+    float x = 0.5f / viewW;
+    float y = 0.5f / viewH;
 
-    memcpy(vertexBuffer, vertices, sizeof(vertices));
+    int32 vertCount = (RETRO_REV02 ? 60 : 24) - 6;
+    for (int32 v = 0; v < vertCount; ++v) {
+        RenderVertex *vertex = &vertBuffer[v];
+        vertex->pos.x = vertex->pos.x - x;
+        vertex->pos.y = vertex->pos.y + y;
+
+        if (vertex->tex.x)
+            vertex->tex.x = screens[0].size.x * (1.0f / 512.0f);
+
+        if (vertex->tex.y)
+            vertex->tex.y = screens[0].size.y * (1.0f / 512.0f);
+    }
+
+    memcpy(vertexBuffer, vertBuffer, sizeof(vertBuffer));
     if (vertexBufferLocalMem) {
-        memcpy(vertexBufferLocalMem, vertices, sizeof(vertices));
+        memcpy(vertexBufferLocalMem, vertBuffer, sizeof(vertBuffer));
     }
 }
 
@@ -415,72 +409,7 @@ void RenderDevice::CopyFrameBuffer()
                 dstTex[y * pitchStride + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
             }
         }
-
-#if RETRO_PLATFORM == RETRO_PS3
-        if (gcmContext && screenTextureLocalMem[s] && frameBufferLocalMem[currentBuffer]) {
-            gcmContextData *ctx = (gcmContextData *)gcmContext;
-
-            gcmTransferScale scale;
-            memset(&scale, 0, sizeof(gcmTransferScale));
-            scale.conversion = GCM_TRANSFER_CONVERSION_TRUNCATE;
-            scale.format = GCM_TRANSFER_SCALE_FORMAT_A8R8G8B8;
-            scale.operation = GCM_TRANSFER_OPERATION_SRCCOPY;
-            scale.clipX = 0;
-            scale.clipY = 0;
-            scale.clipW = videoSettings.fsWidth ? (uint16)videoSettings.fsWidth : 1280;
-            scale.clipH = videoSettings.fsHeight ? (uint16)videoSettings.fsHeight : 720;
-            scale.outX = 0;
-            scale.outY = 0;
-            scale.outW = scale.clipW;
-            scale.outH = scale.clipH;
-            scale.ratioX = (width << 20) / scale.outW;
-            scale.ratioY = (height << 20) / scale.outH;
-            scale.inX = 0;
-            scale.inY = 0;
-            scale.inW = width;
-            scale.inH = height;
-            scale.offset = screenTextureOffset[s];
-            scale.pitch = screenTexturePitch;
-            scale.origin = GCM_TRANSFER_ORIGIN_CORNER;
-            scale.interp = GCM_TRANSFER_INTERPOLATOR_NEAREST;
-
-            gcmTransferSurface surface;
-            memset(&surface, 0, sizeof(gcmTransferSurface));
-            surface.format = GCM_TRANSFER_SURFACE_FORMAT_A8R8G8B8;
-            surface.pitch = frameBufferPitch;
-            surface.offset = frameBufferOffset[currentBuffer];
-
-            rsxSetTransferScaleMode(ctx, GCM_TRANSFER_LOCAL_TO_LOCAL, GCM_TRANSFER_SURFACE);
-            rsxSetTransferScaleSurface(ctx, &scale, &surface);
-        }
-#endif
     }
-}
-
-void RenderDevice::SetRenderTarget()
-{
-#if RETRO_PLATFORM == RETRO_PS3
-    if (gcmContext) {
-        gcmContextData *ctx = (gcmContextData *)gcmContext;
-        gcmSurface sf;
-        memset(&sf, 0, sizeof(gcmSurface));
-        sf.type = GCM_SURFACE_TYPE_LINEAR;
-        sf.colorFormat = GCM_SURFACE_X8R8G8B8;
-        sf.colorTarget = GCM_SURFACE_TARGET_0;
-        sf.colorLocation[0] = GCM_LOCATION_LOCAL;
-        sf.colorOffset[0] = frameBufferOffset[currentBuffer];
-        sf.colorPitch[0] = frameBufferPitch;
-        sf.depthFormat = GCM_SURFACE_Z24S8;
-        sf.depthLocation = GCM_LOCATION_LOCAL;
-        sf.depthOffset = depthBufferOffset;
-        sf.depthPitch = frameBufferPitch;
-        sf.width = videoSettings.fsWidth ? (uint16)videoSettings.fsWidth : 1280;
-        sf.height = videoSettings.fsHeight ? (uint16)videoSettings.fsHeight : 720;
-        sf.x = 0;
-        sf.y = 0;
-        gcmSetRenderTarget(ctx, &sf);
-    }
-#endif
 }
 
 void RenderDevice::FlipScreen()
@@ -491,48 +420,176 @@ void RenderDevice::FlipScreen()
         return;
     }
 
-    // REQ 5: CPU-GPU Synchronization
-    // Trigger RSX frame flip and synchronize CPU and GPU
 #if RETRO_PLATFORM == RETRO_PS3
     if (gcmContext) {
         gcmContextData *ctx = (gcmContextData *)gcmContext;
 
-        SetRenderTarget();
+        uint32 width = videoSettings.fsWidth ? (uint32)videoSettings.fsWidth : 1280;
+        uint32 height = videoSettings.fsHeight ? (uint32)videoSettings.fsHeight : 720;
 
-        uint16 width = videoSettings.fsWidth ? (uint16)videoSettings.fsWidth : 1280;
-        uint16 height = videoSettings.fsHeight ? (uint16)videoSettings.fsHeight : 720;
-        gcmSetViewport(ctx, 0, 0, width, height, 0.0f, 1.0f, NULL);
-        gcmSetScissor(ctx, 0, 0, width, height);
+        // 1. Setup Render Target Surface (Color buffer + Z/Depth buffer)
+        gcmSurface rtSurface;
+        memset(&rtSurface, 0, sizeof(rtSurface));
+        rtSurface.type = GCM_SURFACE_TYPE_LINEAR;
+        rtSurface.colorFormat = GCM_SURFACE_X8R8G8B8;
+        rtSurface.colorTarget = GCM_SURFACE_TARGET_0;
+        rtSurface.colorLocation[0] = GCM_LOCATION_LOCAL;
+        rtSurface.colorOffset[0] = frameBufferOffset[currentBuffer];
+        rtSurface.colorPitch[0] = frameBufferPitch;
+        rtSurface.depthFormat = GCM_SURFACE_Z24S8;
+        rtSurface.depthLocation = GCM_LOCATION_LOCAL;
+        rtSurface.depthOffset = depthBufferOffset;
+        rtSurface.depthPitch = frameBufferPitch;
+        rtSurface.width = width;
+        rtSurface.height = height;
+        rtSurface.x = 0;
+        rtSurface.y = 0;
 
+        rsxSetSurface(ctx, &rtSurface);
+
+        // 2. Set Viewport & Scissor
+        rsxSetViewport(ctx, 0, 0, width, height, 0.0f, 1.0f, (float[4]){ (float)width / 2.0f, (float)height / -2.0f, 0.5f, 0.0f });
+        rsxSetScissor(ctx, 0, 0, width, height);
+
+        // 3. Clear Screen (Color + Depth)
+        rsxSetClearColor(ctx, 0x00000000);
+        rsxSetClearDepthStencil(ctx, 0xFFFFFF00);
+        rsxClear(ctx, GCM_CLEAR_COLOR | GCM_CLEAR_DEPTH);
+
+        // 4. Set Pipeline States (Cull, Depth)
+        rsxSetCullFaceEnable(ctx, GCM_FALSE);
+        rsxSetDepthTestEnable(ctx, GCM_FALSE);
+
+        // 5. Bind Shaders
+        if (vertexShaderBytes) {
+            rsxLoadVertexProgram(ctx, (rsxProgramConst *)vertexShaderBytes);
+        }
+        if (fragmentShaderHostDesc && fragmentShaderOffset) {
+            rsxLoadFragmentProgramLocation(ctx, (rsxProgramConst *)fragmentShaderHostDesc, fragmentShaderOffset, GCM_LOCATION_LOCAL);
+        }
+
+        // 6. Bind Vertex Buffer Stream Attributes
+        if (vertexBufferLocalMem && vertexBufferOffset) {
+            // Attribute 0: Position (Float3)
+            rsxSetVertexDataArray(ctx, 0, 0, sizeof(RenderVertex), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL, vertexBufferOffset + (uint32)offsetof(RenderVertex, pos));
+            // Attribute 1: Color (UByte4)
+            rsxSetVertexDataArray(ctx, 1, 0, sizeof(RenderVertex), 4, GCM_VERTEX_DATA_TYPE_U8, GCM_LOCATION_LOCAL, vertexBufferOffset + (uint32)offsetof(RenderVertex, color));
+            // Attribute 2: TexCoord (Float2)
+            rsxSetVertexDataArray(ctx, 2, 0, sizeof(RenderVertex), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL, vertexBufferOffset + (uint32)offsetof(RenderVertex, tex));
+        }
+
+        // Texture setup helper lambda
+        auto bindScreenTexture = [&](int screenIdx) {
+            gcmTexture tex;
+            memset(&tex, 0, sizeof(tex));
+            tex.format = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_LN | GCM_TEXTURE_NR;
+            tex.mipmap = 1;
+            tex.dimension = GCM_TEXTURE_DIMS_2D;
+            tex.cubemap = GCM_FALSE;
+            tex.remap = ((GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_B_SHIFT) |
+                         (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_G_SHIFT) |
+                         (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_R_SHIFT) |
+                         (GCM_TEXTURE_REMAP_TYPE_REMAP << GCM_TEXTURE_REMAP_TYPE_A_SHIFT) |
+                         (GCM_TEXTURE_REMAP_COLOR_B << GCM_TEXTURE_REMAP_COLOR_B_SHIFT) |
+                         (GCM_TEXTURE_REMAP_COLOR_G << GCM_TEXTURE_REMAP_COLOR_G_SHIFT) |
+                         (GCM_TEXTURE_REMAP_COLOR_R << GCM_TEXTURE_REMAP_COLOR_R_SHIFT) |
+                         (GCM_TEXTURE_REMAP_COLOR_A << GCM_TEXTURE_REMAP_COLOR_A_SHIFT));
+            tex.width = 512;
+            tex.height = 512;
+            tex.depth = 1;
+            tex.pitch = screenTexturePitch;
+            tex.location = GCM_LOCATION_LOCAL;
+            tex.offset = screenTextureOffset[screenIdx];
+            rsxLoadTexture(ctx, 0, &tex);
+            rsxTextureControl(ctx, 0, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
+            rsxTextureFilter(ctx, 0, 0, GCM_TEXTURE_LINEAR, GCM_TEXTURE_LINEAR, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
+            rsxTextureWrap(ctx, 0, GCM_TEXTURE_CLAMP_TO_EDGE, GCM_TEXTURE_CLAMP_TO_EDGE, GCM_TEXTURE_CLAMP_TO_EDGE, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
+        };
+
+        // 7. Draw Screen Primitives
+        int32 startVert = 0;
+        switch (videoSettings.screenCount) {
+            default:
+            case 0:
+#if RETRO_REV02
+                startVert = 54;
+#else
+                startVert = 18;
+#endif
+                bindScreenTexture(0);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
+                break;
+
+            case 1:
+                bindScreenTexture(0);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 0, 6);
+                break;
+
+            case 2:
+#if RETRO_REV02
+                startVert = startVertex_2P[0];
+#else
+                startVert = 6;
+#endif
+                bindScreenTexture(0);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
+
+#if RETRO_REV02
+                startVert = startVertex_2P[1];
+#else
+                startVert = 12;
+#endif
+                bindScreenTexture(1);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
+                break;
+
+#if RETRO_REV02
+            case 3:
+                bindScreenTexture(0);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[0], 6);
+                bindScreenTexture(1);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[1], 6);
+                bindScreenTexture(2);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[2], 6);
+                break;
+
+            case 4:
+                bindScreenTexture(0);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 30, 6);
+                bindScreenTexture(1);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 36, 6);
+                bindScreenTexture(2);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 42, 6);
+                bindScreenTexture(3);
+                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 48, 6);
+                break;
+#endif
+        }
+
+        // 8. REQ 5: CPU-GPU Synchronization
         if (lastShaderID != videoSettings.shaderID) {
             lastShaderID = videoSettings.shaderID;
         }
 
-        uint32 fragOffset = shaderList[videoSettings.shaderID].fragmentOffset;
-        if (fragOffset == 0)
-            fragOffset = fragmentShaderOffset;
-        if (fragOffset != 0) {
-            gcmSetFragmentProgramOffset(ctx, fragOffset, GCM_LOCATION_LOCAL);
-        }
-
-        // Draw quad primitive via RSX command stream
-        gcmSetDrawArrays(ctx, GCM_TYPE_TRIANGLES, 0, 6);
-
         if (firstFrame) {
             gcmResetFlipStatus();
-            firstFrame = false;
         }
 
-        // Issue RSX flip command for current buffer and flush buffer
-        cellGcmSetFlipCommand(ctx, currentBuffer);
-        cellGcmSetWaitFlip(ctx);
-        cellGcmFlush(ctx);
+        // Issue RSX flip command for current buffer and flush to RSX
+        gcmSetFlip(ctx, currentBuffer);
+        rsxFlushBuffer(ctx);
 
-        int flipTimeout = 1000;
+        // Instruct RSX to wait for flip before processing subsequent frame commands
+        gcmSetWaitFlip(ctx);
+
+        // Wait for flip to complete on display controller
+        int flipTimeout = 200;
         while (gcmGetFlipStatus() != 0 && --flipTimeout > 0) {
-            usleep(100);
+            usleep(200);
         }
         gcmResetFlipStatus();
+
+        firstFrame = false;
 
         // Swap backbuffer index
         currentBuffer ^= 1;
@@ -543,62 +600,26 @@ void RenderDevice::FlipScreen()
 void RenderDevice::Release(bool32 isRefresh)
 {
 #if RETRO_PLATFORM == RETRO_PS3
-    if (rsxFreeLocalMem) {
-#if defined(rsxFree)
-        rsxFree(rsxFreeLocalMem);
-#else
-        free(rsxFreeLocalMem);
-#endif
-        rsxFreeLocalMem = nullptr;
-    }
+    FreeLocalMemory(rsxFreeLocalMem);
+    rsxFreeLocalMem = nullptr;
 
-    if (fragmentShaderLocalMem) {
-#if RETRO_PLATFORM == RETRO_PS3
-        rsxFree(fragmentShaderLocalMem);
-#else
-        free(fragmentShaderLocalMem);
-#endif
-        fragmentShaderLocalMem = nullptr;
-    }
+    FreeLocalMemory(fragmentShaderLocalMem);
+    fragmentShaderLocalMem = nullptr;
 
-    if (depthBufferLocalMem) {
-#if RETRO_PLATFORM == RETRO_PS3
-        rsxFree(depthBufferLocalMem);
-#else
-        free(depthBufferLocalMem);
-#endif
-        depthBufferLocalMem = nullptr;
-    }
+    FreeLocalMemory(depthBufferLocalMem);
+    depthBufferLocalMem = nullptr;
 
-    if (vertexBufferLocalMem) {
-#if RETRO_PLATFORM == RETRO_PS3
-        rsxFree(vertexBufferLocalMem);
-#else
-        free(vertexBufferLocalMem);
-#endif
-        vertexBufferLocalMem = nullptr;
-    }
+    FreeLocalMemory(vertexBufferLocalMem);
+    vertexBufferLocalMem = nullptr;
 
     for (int s = 0; s < SCREEN_COUNT; ++s) {
-        if (screenTextureLocalMem[s]) {
-#if RETRO_PLATFORM == RETRO_PS3
-            rsxFree(screenTextureLocalMem[s]);
-#else
-            free(screenTextureLocalMem[s]);
-#endif
-            screenTextureLocalMem[s] = nullptr;
-        }
+        FreeLocalMemory(screenTextureLocalMem[s]);
+        screenTextureLocalMem[s] = nullptr;
     }
 
     for (int i = 0; i < 2; ++i) {
-        if (frameBufferLocalMem[i]) {
-#if RETRO_PLATFORM == RETRO_PS3
-            rsxFree(frameBufferLocalMem[i]);
-#else
-            free(frameBufferLocalMem[i]);
-#endif
-            frameBufferLocalMem[i] = nullptr;
-        }
+        FreeLocalMemory(frameBufferLocalMem[i]);
+        frameBufferLocalMem[i] = nullptr;
     }
 
     if (hostCmdBuffer) {
@@ -704,6 +725,10 @@ void RenderDevice::SetupVideoTexture_YUV444(int32 width, int32 height, uint8 *yP
 
 bool RenderDevice::ProcessEvents()
 {
+#if RETRO_PLATFORM == RETRO_PS3
+    sysUtilCheckCallback();
+#endif
+
 #if RETRO_INPUTDEVICE_SDL2
     SDL_Event event;
     while (SDL_PollEvent(&event)) {

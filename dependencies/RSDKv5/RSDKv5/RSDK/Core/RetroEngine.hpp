@@ -681,6 +681,7 @@ extern "C" {
 #if RETRO_PLATFORM == RETRO_PS3
 #include <malloc.h>
 #include <stdlib.h>
+#include <sysutil/sysutil.h>
 #include <sysutil/video.h>
 #if RETRO_RENDERDEVICE_GCM
 #include <rsx/gcm_sys.h>

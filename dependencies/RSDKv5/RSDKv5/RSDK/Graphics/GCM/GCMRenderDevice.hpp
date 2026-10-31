@@ -64,10 +64,20 @@ public:
     static uint32 frameBufferPitch;
     static uint32 currentBuffer;
 
+    static void *depthBufferLocalMem;
+    static uint32 depthBufferOffset;
+
     static void *textureLocalMem;
     static uint32 textureOffset;
     static uint32 textureWidth;
     static uint32 textureHeight;
+
+    static void *vertexBufferLocalMem;
+    static uint32 vertexBufferOffset;
+
+    static void *screenTextureLocalMem[SCREEN_COUNT];
+    static uint32 screenTextureOffset[SCREEN_COUNT];
+    static uint32 screenTexturePitch;
 
     static void *rsxFreeLocalMem;
     static uint32 rsxFreeLocalMemSize;
@@ -89,6 +99,7 @@ private:
     static void InitVertexBuffer();
     static bool InitGraphicsAPI();
     static void GetDisplays();
+    static void SetRenderTarget();
 };
 
 struct ShaderEntry : public ShaderEntryBase {

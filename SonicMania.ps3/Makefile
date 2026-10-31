@@ -9,7 +9,6 @@ endif
 
 include $(PSL1GHT)/ppu_rules
 
-export CGCOMP  := cgcomp
 export BIN2S   := bin2s
 export PPU_GCC := ppu-gcc
 
@@ -41,7 +40,7 @@ SOURCES		:=	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
 	../SonicMania/ 										\
 	../SonicMania/Objects
-DATA		:=	data ../dependencies/RSDKv5/RSDKv5/RSDK/Graphics/GCM/shaders
+DATA		:=	data ../dependencies/RSDKv5/RSDKv5/shaders
 INCLUDES	:=	\
 	../dependencies/RSDKv5/RSDKv5/ 						\
 	../dependencies/RSDKv5/dependencies/all/ 			\
@@ -150,9 +149,15 @@ sFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.S)))
 BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.bin)))
 
-CG_VFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.v.cg)))
-CG_FFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.f.cg)))
-SHADER_OFILES	:=	$(CG_VFILES:.v.cg=.vpo.s.o) $(CG_FFILES:.f.cg=.fpo.s.o)
+SHADERS_DIR	:=	../dependencies/RSDKv5/RSDKv5/shaders
+VPO_FILES	:=	$(notdir $(wildcard $(SHADERS_DIR)/*.vpo))
+FPO_FILES	:=	$(notdir $(wildcard $(SHADERS_DIR)/*.fpo))
+
+ifeq ($(strip $(VPO_FILES)$(FPO_FILES)),)
+$(error Missing compiled shaders in $(SHADERS_DIR)! You must convert all Cg shaders to .vpo and .fpo before compiling.)
+endif
+
+SHADER_OFILES	:=	$(VPO_FILES:.vpo=.vpo.s.o) $(FPO_FILES:.fpo=.fpo.s.o)
 
 #---------------------------------------------------------------------------------
 # use CXX for linking C++ projects, CC for standard C
@@ -209,31 +214,23 @@ $(OUTPUT).self: $(OUTPUT).elf
 $(OUTPUT).elf:	$(OFILES)
 
 #---------------------------------------------------------------------------------
-# Explicit Cg shader compilation to .vpo/.fpo, bin2s to .s, and ppu-gcc to .o
+# Explicit shader conversion from .vpo/.fpo using bin2s to .s and ppu-gcc to .o
 #---------------------------------------------------------------------------------
-%.vpo : %.v.cg
-	@echo "Compiling Cg vertex shader $< -> $@"
-	@$(CGCOMP) -v $< $@ 2>/dev/null || ppu-cgcomp -v $< $@ 2>/dev/null
-
-%.fpo : %.f.cg
-	@echo "Compiling Cg fragment shader $< -> $@"
-	@$(CGCOMP) -f $< $@ 2>/dev/null || ppu-cgcomp -f $< $@ 2>/dev/null
-
 %.vpo.s : %.vpo
 	@echo "Converting $< -> $@"
-	@$(BIN2S) -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
 
 %.fpo.s : %.fpo
 	@echo "Converting $< -> $@"
-	@$(BIN2S) -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
+	@bin2s -a 16 -header $(patsubst %.s,%.h,$@) $< > $@
 
 %.vpo.s.o : %.vpo.s
 	@echo "Assembling $< -> $@"
-	@$(PPU_GCC) $(CFLAGS) -c $< -o $@ || $(CC) $(CFLAGS) -c $< -o $@
+	@ppu-gcc $(CFLAGS) -c $< -o $@
 
 %.fpo.s.o : %.fpo.s
 	@echo "Assembling $< -> $@"
-	@$(PPU_GCC) $(CFLAGS) -c $< -o $@ || $(CC) $(CFLAGS) -c $< -o $@
+	@ppu-gcc $(CFLAGS) -c $< -o $@
 
 %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------

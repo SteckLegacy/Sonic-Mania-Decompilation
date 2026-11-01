@@ -94,16 +94,23 @@ public:
 
     static const uint8 *vertexShaderBytes;
     static uint32 vertexShaderSize;
+    static void *vertexShaderUcode;
     static const void *fragmentShaderHostDesc;
     static void *fragmentShaderLocalMem;
     static uint32 fragmentShaderOffset;
     static uint32 fragmentShaderSize;
+
+    static uint32 labelVal;
 
     static uint64 targetFreq;
     static uint64 curTicks;
     static uint64 prevTicks;
 
     static RenderVertex vertexBuffer[60];
+
+    static void SetRenderTarget(uint32 bufferIndex);
+    static void WaitFinish();
+    static void WaitRSXIdle();
 
 private:
     static bool SetupRendering();

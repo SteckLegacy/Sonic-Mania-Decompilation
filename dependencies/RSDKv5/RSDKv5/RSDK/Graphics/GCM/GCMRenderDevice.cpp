@@ -54,8 +54,14 @@
 #ifndef GCM_LOCATION_LOCAL
 #define GCM_LOCATION_LOCAL (0)
 #endif
-#ifndef GCM_SURFACE_Z24S8
-#define GCM_SURFACE_Z24S8 (0x02)
+#ifndef GCM_SURFACE_ZETA_Z24S8
+#define GCM_SURFACE_ZETA_Z24S8 (0x02)
+#endif
+#ifndef GCM_SURFACE_CENTER_1
+#define GCM_SURFACE_CENTER_1 (1)
+#endif
+#ifndef GCM_LABEL_INDEX
+#define GCM_LABEL_INDEX (255)
 #endif
 #ifndef GCM_TYPE_TRIANGLES
 #define GCM_TYPE_TRIANGLES (5)
@@ -109,16 +115,91 @@ uint32 RenderDevice::rsxFreeLocalMemSize = 0;
 
 const uint8 *RenderDevice::vertexShaderBytes = nullptr;
 uint32 RenderDevice::vertexShaderSize = 0;
+void *RenderDevice::vertexShaderUcode = nullptr;
 const void *RenderDevice::fragmentShaderHostDesc = nullptr;
 void *RenderDevice::fragmentShaderLocalMem = nullptr;
 uint32 RenderDevice::fragmentShaderOffset = 0;
 uint32 RenderDevice::fragmentShaderSize = 0;
+
+uint32 RenderDevice::labelVal = 1;
 
 uint64 RenderDevice::targetFreq = 0;
 uint64 RenderDevice::curTicks = 0;
 uint64 RenderDevice::prevTicks = 0;
 
 RenderVertex RenderDevice::vertexBuffer[60];
+
+void RenderDevice::WaitFinish()
+{
+#if RETRO_PLATFORM == RETRO_PS3
+    if (!gcmContext)
+        return;
+    gcmContextData *ctx = (gcmContextData *)gcmContext;
+    rsxSetWriteBackendLabel(ctx, GCM_LABEL_INDEX, labelVal);
+    rsxFlushBuffer(ctx);
+    while (*(vu32 *)gcmGetLabelAddress(GCM_LABEL_INDEX) != labelVal)
+        usleep(30);
+    ++labelVal;
+#endif
+}
+
+void RenderDevice::WaitRSXIdle()
+{
+#if RETRO_PLATFORM == RETRO_PS3
+    if (!gcmContext)
+        return;
+    gcmContextData *ctx = (gcmContextData *)gcmContext;
+    rsxSetWriteBackendLabel(ctx, GCM_LABEL_INDEX, labelVal);
+    rsxSetWaitLabel(ctx, GCM_LABEL_INDEX, labelVal);
+    ++labelVal;
+    WaitFinish();
+#endif
+}
+
+void RenderDevice::SetRenderTarget(uint32 bufferIndex)
+{
+#if RETRO_PLATFORM == RETRO_PS3
+    if (!gcmContext)
+        return;
+    gcmContextData *ctx = (gcmContextData *)gcmContext;
+
+    uint32 width = videoSettings.fsWidth ? (uint32)videoSettings.fsWidth : 1280;
+    uint32 height = videoSettings.fsHeight ? (uint32)videoSettings.fsHeight : 720;
+
+    gcmSurface sf;
+    memset(&sf, 0, sizeof(sf));
+    sf.colorFormat = GCM_SURFACE_X8R8G8B8;
+    sf.colorTarget = GCM_SURFACE_TARGET_0;
+    sf.colorLocation[0] = GCM_LOCATION_LOCAL;
+    sf.colorOffset[0] = frameBufferOffset[bufferIndex];
+    sf.colorPitch[0] = frameBufferPitch;
+
+    sf.colorLocation[1] = GCM_LOCATION_LOCAL;
+    sf.colorLocation[2] = GCM_LOCATION_LOCAL;
+    sf.colorLocation[3] = GCM_LOCATION_LOCAL;
+    sf.colorOffset[1] = 0;
+    sf.colorOffset[2] = 0;
+    sf.colorOffset[3] = 0;
+    sf.colorPitch[1] = 64;
+    sf.colorPitch[2] = 64;
+    sf.colorPitch[3] = 64;
+
+    sf.depthFormat = GCM_SURFACE_ZETA_Z24S8;
+    sf.depthLocation = GCM_LOCATION_LOCAL;
+    sf.depthOffset = depthBufferOffset;
+    sf.depthPitch = frameBufferPitch;
+
+    sf.type = GCM_SURFACE_TYPE_LINEAR;
+    sf.antiAlias = GCM_SURFACE_CENTER_1;
+
+    sf.width = width;
+    sf.height = height;
+    sf.x = 0;
+    sf.y = 0;
+
+    rsxSetSurface(ctx, &sf);
+#endif
+}
 
 ShaderEntry shaderList[SHADER_COUNT];
 int32 shaderCount = 0;
@@ -293,17 +374,33 @@ bool RenderDevice::InitGraphicsAPI()
     firstFrame = true;
 
     // REQ 4: Cg Vertex and Fragment Shader setup & offset calculation
-    // Load and register vertex and fragment shader bytes
     vertexShaderBytes = shader_vpo ? shader_vpo : (const uint8 *)cgVertexProgramUcode;
     vertexShaderSize  = (shader_vpo && shader_vpo_end) ? (uint32)(shader_vpo_end - shader_vpo) : sizeof(cgVertexProgramUcode);
+    vertexShaderUcode = nullptr;
 
     const void *fShaderData = shader_fpo ? (const void *)shader_fpo : (const void *)cgFragmentProgramUcode;
     fragmentShaderSize = (shader_fpo && shader_fpo_end) ? (uint32)(shader_fpo_end - shader_fpo) : sizeof(cgFragmentProgramUcode);
     fragmentShaderHostDesc = fShaderData;
 
-    fragmentShaderLocalMem = AllocLocalMemory(64, fragmentShaderSize);
+    if (vertexShaderBytes) {
+        u32 vpsize = 0;
+        rsxVertexProgramGetUCode((const rsxVertexProgram *)vertexShaderBytes, &vertexShaderUcode, &vpsize);
+    }
+
+    void *fp_ucode = nullptr;
+    u32 fpsize = 0;
+    if (fragmentShaderHostDesc) {
+        rsxFragmentProgramGetUCode((const rsxFragmentProgram *)fragmentShaderHostDesc, &fp_ucode, &fpsize);
+    }
+
+    if (!fp_ucode || !fpsize) {
+        fp_ucode = (void *)fShaderData;
+        fpsize = fragmentShaderSize;
+    }
+
+    fragmentShaderLocalMem = AllocLocalMemory(64, fpsize);
     if (fragmentShaderLocalMem) {
-        memcpy(fragmentShaderLocalMem, fShaderData, fragmentShaderSize);
+        memcpy(fragmentShaderLocalMem, fp_ucode, fpsize);
         if (!AddressToOffset(fragmentShaderLocalMem, &fragmentShaderOffset)) {
             PrintLog(PRINT_NORMAL, "GCM: Failed to map Cg fragment program address to RSX offset.");
         }
@@ -311,6 +408,10 @@ bool RenderDevice::InitGraphicsAPI()
 
     // Set GCM flip mode (VSYNC)
     gcmSetFlipMode(GCM_FLIP_VSYNC);
+
+    WaitRSXIdle();
+
+    SetRenderTarget(currentBuffer);
 
 #endif // RETRO_PLATFORM == RETRO_PS3
 
@@ -413,26 +514,15 @@ void RenderDevice::FlipScreen()
         uint32 height = videoSettings.fsHeight ? (uint32)videoSettings.fsHeight : 720;
 
         // 1. Setup Render Target Surface (Color buffer + Z/Depth buffer)
-        gcmSurface rtSurface;
-        memset(&rtSurface, 0, sizeof(rtSurface));
-        rtSurface.type = GCM_SURFACE_TYPE_LINEAR;
-        rtSurface.colorFormat = GCM_SURFACE_X8R8G8B8;
-        rtSurface.colorTarget = GCM_SURFACE_TARGET_0;
-        rtSurface.colorLocation[0] = GCM_LOCATION_LOCAL;
-        rtSurface.colorOffset[0] = frameBufferOffset[currentBuffer];
-        rtSurface.colorPitch[0] = frameBufferPitch;
-        rtSurface.depthFormat = GCM_SURFACE_Z24S8;
-        rtSurface.depthLocation = GCM_LOCATION_LOCAL;
-        rtSurface.depthOffset = depthBufferOffset;
-        rtSurface.depthPitch = frameBufferPitch;
-        rtSurface.width = width;
-        rtSurface.height = height;
-        rtSurface.x = 0;
-        rtSurface.y = 0;
+        SetRenderTarget(currentBuffer);
 
-        rsxSetSurface(ctx, &rtSurface);
+        // 2. Set Draw Environment (Color masks, Viewport, Scissor)
+        rsxSetColorMask(ctx, GCM_COLOR_MASK_B | GCM_COLOR_MASK_G | GCM_COLOR_MASK_R | GCM_COLOR_MASK_A);
+        rsxSetColorMaskMrt(ctx, 0);
 
-        // 2. Set Viewport & Scissor
+        for (int i = 0; i < 8; ++i)
+            rsxSetViewportClip(ctx, i, width, height);
+
         const f32 vpScale[4]  = { (f32)width * 0.5f, (f32)height * -0.5f, 0.5f, 0.0f };
         const f32 vpOffset[4] = { (f32)width * 0.5f, (f32)height * 0.5f, 0.5f, 0.0f };
         rsxSetViewport(ctx, 0, 0, width, height, 0.0f, 1.0f, vpScale, vpOffset);
@@ -441,18 +531,15 @@ void RenderDevice::FlipScreen()
         // 3. Clear Screen (Color + Depth)
         rsxSetClearColor(ctx, 0x00000000);
         rsxSetClearDepthStencil(ctx, 0xFFFFFF00);
-        rsxClearSurface(ctx, GCM_CLEAR_R | GCM_CLEAR_G | GCM_CLEAR_B | GCM_CLEAR_A | GCM_CLEAR_Z);
+        rsxClearSurface(ctx, GCM_CLEAR_R | GCM_CLEAR_G | GCM_CLEAR_B | GCM_CLEAR_A | GCM_CLEAR_S | GCM_CLEAR_Z);
 
         // 4. Set Pipeline States (Cull, Depth)
         rsxSetCullFaceEnable(ctx, GCM_FALSE);
         rsxSetDepthTestEnable(ctx, GCM_FALSE);
 
         // 5. Bind Shaders
-        if (vertexShaderBytes) {
-            void *ucode = nullptr;
-            u32 ucodeSize = 0;
-            rsxVertexProgramGetUCode((const rsxVertexProgram *)vertexShaderBytes, &ucode, &ucodeSize);
-            rsxLoadVertexProgram(ctx, (const rsxVertexProgram *)vertexShaderBytes, ucode);
+        if (vertexShaderBytes && vertexShaderUcode) {
+            rsxLoadVertexProgram(ctx, (const rsxVertexProgram *)vertexShaderBytes, vertexShaderUcode);
         }
         if (fragmentShaderHostDesc && fragmentShaderOffset) {
             rsxLoadFragmentProgramLocation(ctx, (const rsxFragmentProgram *)fragmentShaderHostDesc, fragmentShaderOffset, GCM_LOCATION_LOCAL);
@@ -460,19 +547,21 @@ void RenderDevice::FlipScreen()
 
         // 6. Bind Vertex Buffer Stream Attributes
         if (vertexBufferLocalMem && vertexBufferOffset) {
-            // Attribute 0: Position (Float3)
+            // Attribute 0 (Position): Float3
             rsxBindVertexArrayAttrib(ctx, 0, 0, vertexBufferOffset + (uint32)offsetof(RenderVertex, pos), sizeof(RenderVertex), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL);
-            // Attribute 1: Color (UByte4)
+            // Attribute 1 (Color): UByte4
             rsxBindVertexArrayAttrib(ctx, 1, 0, vertexBufferOffset + (uint32)offsetof(RenderVertex, color), sizeof(RenderVertex), 4, GCM_VERTEX_DATA_TYPE_U8, GCM_LOCATION_LOCAL);
-            // Attribute 2: TexCoord (Float2)
+            // Attribute 2 (TexCoord): Float2
             rsxBindVertexArrayAttrib(ctx, 2, 0, vertexBufferOffset + (uint32)offsetof(RenderVertex, tex), sizeof(RenderVertex), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL);
         }
 
         // Texture setup helper lambda
         auto bindScreenTexture = [&](int screenIdx) {
+            rsxInvalidateTextureCache(ctx, GCM_INVALIDATE_TEXTURE);
+
             gcmTexture tex;
             memset(&tex, 0, sizeof(tex));
-            tex.format = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_FORMAT_LIN | GCM_TEXTURE_FORMAT_UNRM;
+            tex.format = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_FORMAT_LIN;
             tex.mipmap = 1;
             tex.dimension = GCM_TEXTURE_DIMS_2D;
             tex.cubemap = GCM_FALSE;

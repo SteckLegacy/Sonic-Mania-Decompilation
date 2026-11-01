@@ -116,7 +116,7 @@ LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	$(shell pkg-config --libs sdl2 theora) -lgcm_sys -lrsx -lnet -lsysutil -lsysmodule
+LIBS	:=	$(shell pkg-config --libs sdl2 theora) -lrsx -lgcm_sys -lio -lnet -lsysutil -lsysmodule -lrt -llv2 -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -222,11 +222,11 @@ vpath %.fpo $(CURDIR)/$(SHADERS_DIR)
 
 %.vpo.s : %.vpo
 	@echo "Converting $< -> $@"
-	@$(BIN2S) -a 16 $< > $@
+	@$(BIN2S) -a 64 $< > $@
 
 %.fpo.s : %.fpo
 	@echo "Converting $< -> $@"
-	@$(BIN2S) -a 16 $< > $@
+	@$(BIN2S) -a 64 $< > $@
 
 %.vpo.s.o : %.vpo.s
 	@echo "Assembling $< -> $@"

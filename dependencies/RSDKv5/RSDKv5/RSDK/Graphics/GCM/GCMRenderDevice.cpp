@@ -304,8 +304,37 @@ bool RenderDevice::InitGraphicsAPI()
 
     videoSettings.fsWidth = res.width;
     videoSettings.fsHeight = res.height;
-    videoSettings.pixWidth = res.width;
-    videoSettings.pixHeight = res.height;
+
+    viewSize.x = (float)res.width;
+    viewSize.y = (float)res.height;
+
+    int32 maxPixHeight = 0;
+    int32 screenWidth = 0;
+    for (int32 s = 0; s < SCREEN_COUNT; ++s) {
+        if (videoSettings.pixHeight > maxPixHeight)
+            maxPixHeight = videoSettings.pixHeight;
+
+        screens[s].size.y = videoSettings.pixHeight;
+
+        float viewAspect = viewSize.x / viewSize.y;
+        screenWidth = (int32)((viewAspect * videoSettings.pixHeight) + 3) & 0xFFFFFFFC;
+        if (screenWidth < videoSettings.pixWidth)
+            screenWidth = videoSettings.pixWidth;
+
+#if !RETRO_USE_ORIGINAL_CODE
+        if (customSettings.maxPixWidth && screenWidth > customSettings.maxPixWidth)
+            screenWidth = customSettings.maxPixWidth;
+#else
+        if (screenWidth > DEFAULT_PIXWIDTH)
+            screenWidth = DEFAULT_PIXWIDTH;
+#endif
+
+        memset(&screens[s].frameBuffer, 0, sizeof(screens[s].frameBuffer));
+        SetScreenSize(s, screenWidth, screens[s].size.y);
+    }
+
+    pixelSize.x = (float)screens[0].size.x;
+    pixelSize.y = (float)screens[0].size.y;
 
     displayInfo.viewport.x = 0;
     displayInfo.viewport.y = 0;

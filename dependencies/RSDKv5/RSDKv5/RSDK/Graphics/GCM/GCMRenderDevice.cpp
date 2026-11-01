@@ -57,23 +57,8 @@
 #ifndef GCM_SURFACE_Z24S8
 #define GCM_SURFACE_Z24S8 (0x02)
 #endif
-#ifndef GCM_TEXTURE_FORMAT_A8R8G8B8
-#define GCM_TEXTURE_FORMAT_A8R8G8B8 (0x85)
-#endif
-#ifndef GCM_TEXTURE_MIPMAP
-#define GCM_TEXTURE_MIPMAP (1)
-#endif
-#ifndef GCM_TEXTURE_WRAP_CLAMP_TO_EDGE
-#define GCM_TEXTURE_WRAP_CLAMP_TO_EDGE (2)
-#endif
-#ifndef GCM_TEXTURE_FILTER_LINEAR
-#define GCM_TEXTURE_FILTER_LINEAR (2)
-#endif
-#ifndef GCM_TEXTURE_FILTER_NEAREST
-#define GCM_TEXTURE_FILTER_NEAREST (1)
-#endif
 #ifndef GCM_TYPE_TRIANGLES
-#define GCM_TYPE_TRIANGLES (4)
+#define GCM_TYPE_TRIANGLES (5)
 #endif
 
 #if RETRO_PLATFORM != RETRO_PS3
@@ -448,13 +433,15 @@ void RenderDevice::FlipScreen()
         rsxSetSurface(ctx, &rtSurface);
 
         // 2. Set Viewport & Scissor
-        rsxSetViewport(ctx, 0, 0, width, height, 0.0f, 1.0f, (float[4]){ (float)width / 2.0f, (float)height / -2.0f, 0.5f, 0.0f });
+        const f32 vpScale[4]  = { (f32)width * 0.5f, (f32)height * -0.5f, 0.5f, 0.0f };
+        const f32 vpOffset[4] = { (f32)width * 0.5f, (f32)height * 0.5f, 0.5f, 0.0f };
+        rsxSetViewport(ctx, 0, 0, width, height, 0.0f, 1.0f, vpScale, vpOffset);
         rsxSetScissor(ctx, 0, 0, width, height);
 
         // 3. Clear Screen (Color + Depth)
         rsxSetClearColor(ctx, 0x00000000);
         rsxSetClearDepthStencil(ctx, 0xFFFFFF00);
-        rsxClear(ctx, GCM_CLEAR_COLOR | GCM_CLEAR_DEPTH);
+        rsxClearSurface(ctx, GCM_CLEAR_R | GCM_CLEAR_G | GCM_CLEAR_B | GCM_CLEAR_A | GCM_CLEAR_Z);
 
         // 4. Set Pipeline States (Cull, Depth)
         rsxSetCullFaceEnable(ctx, GCM_FALSE);
@@ -462,27 +449,30 @@ void RenderDevice::FlipScreen()
 
         // 5. Bind Shaders
         if (vertexShaderBytes) {
-            rsxLoadVertexProgram(ctx, (rsxProgramConst *)vertexShaderBytes);
+            void *ucode = nullptr;
+            u32 ucodeSize = 0;
+            rsxVertexProgramGetUCode((const rsxVertexProgram *)vertexShaderBytes, &ucode, &ucodeSize);
+            rsxLoadVertexProgram(ctx, (const rsxVertexProgram *)vertexShaderBytes, ucode);
         }
         if (fragmentShaderHostDesc && fragmentShaderOffset) {
-            rsxLoadFragmentProgramLocation(ctx, (rsxProgramConst *)fragmentShaderHostDesc, fragmentShaderOffset, GCM_LOCATION_LOCAL);
+            rsxLoadFragmentProgramLocation(ctx, (const rsxFragmentProgram *)fragmentShaderHostDesc, fragmentShaderOffset, GCM_LOCATION_LOCAL);
         }
 
         // 6. Bind Vertex Buffer Stream Attributes
         if (vertexBufferLocalMem && vertexBufferOffset) {
             // Attribute 0: Position (Float3)
-            rsxSetVertexDataArray(ctx, 0, 0, sizeof(RenderVertex), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL, vertexBufferOffset + (uint32)offsetof(RenderVertex, pos));
+            rsxBindVertexArrayAttrib(ctx, 0, 0, vertexBufferOffset + (uint32)offsetof(RenderVertex, pos), sizeof(RenderVertex), 3, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL);
             // Attribute 1: Color (UByte4)
-            rsxSetVertexDataArray(ctx, 1, 0, sizeof(RenderVertex), 4, GCM_VERTEX_DATA_TYPE_U8, GCM_LOCATION_LOCAL, vertexBufferOffset + (uint32)offsetof(RenderVertex, color));
+            rsxBindVertexArrayAttrib(ctx, 1, 0, vertexBufferOffset + (uint32)offsetof(RenderVertex, color), sizeof(RenderVertex), 4, GCM_VERTEX_DATA_TYPE_U8, GCM_LOCATION_LOCAL);
             // Attribute 2: TexCoord (Float2)
-            rsxSetVertexDataArray(ctx, 2, 0, sizeof(RenderVertex), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL, vertexBufferOffset + (uint32)offsetof(RenderVertex, tex));
+            rsxBindVertexArrayAttrib(ctx, 2, 0, vertexBufferOffset + (uint32)offsetof(RenderVertex, tex), sizeof(RenderVertex), 2, GCM_VERTEX_DATA_TYPE_F32, GCM_LOCATION_LOCAL);
         }
 
         // Texture setup helper lambda
         auto bindScreenTexture = [&](int screenIdx) {
             gcmTexture tex;
             memset(&tex, 0, sizeof(tex));
-            tex.format = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_LN | GCM_TEXTURE_NR;
+            tex.format = GCM_TEXTURE_FORMAT_A8R8G8B8 | GCM_TEXTURE_FORMAT_LIN | GCM_TEXTURE_FORMAT_UNRM;
             tex.mipmap = 1;
             tex.dimension = GCM_TEXTURE_DIMS_2D;
             tex.cubemap = GCM_FALSE;
@@ -503,7 +493,7 @@ void RenderDevice::FlipScreen()
             rsxLoadTexture(ctx, 0, &tex);
             rsxTextureControl(ctx, 0, GCM_TRUE, 0 << 8, 12 << 8, GCM_TEXTURE_MAX_ANISO_1);
             rsxTextureFilter(ctx, 0, 0, GCM_TEXTURE_LINEAR, GCM_TEXTURE_LINEAR, GCM_TEXTURE_CONVOLUTION_QUINCUNX);
-            rsxTextureWrap(ctx, 0, GCM_TEXTURE_CLAMP_TO_EDGE, GCM_TEXTURE_CLAMP_TO_EDGE, GCM_TEXTURE_CLAMP_TO_EDGE, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
+            rsxTextureWrapMode(ctx, 0, GCM_TEXTURE_CLAMP_TO_EDGE, GCM_TEXTURE_CLAMP_TO_EDGE, GCM_TEXTURE_CLAMP_TO_EDGE, 0, GCM_TEXTURE_ZFUNC_LESS, 0);
         };
 
         // 7. Draw Screen Primitives
@@ -517,12 +507,12 @@ void RenderDevice::FlipScreen()
                 startVert = 18;
 #endif
                 bindScreenTexture(0);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
                 break;
 
             case 1:
                 bindScreenTexture(0);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 0, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, 0, 6);
                 break;
 
             case 2:
@@ -532,7 +522,7 @@ void RenderDevice::FlipScreen()
                 startVert = 6;
 #endif
                 bindScreenTexture(0);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
 
 #if RETRO_REV02
                 startVert = startVertex_2P[1];
@@ -540,28 +530,28 @@ void RenderDevice::FlipScreen()
                 startVert = 12;
 #endif
                 bindScreenTexture(1);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, startVert, 6);
                 break;
 
 #if RETRO_REV02
             case 3:
                 bindScreenTexture(0);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[0], 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[0], 6);
                 bindScreenTexture(1);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[1], 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[1], 6);
                 bindScreenTexture(2);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[2], 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, startVertex_3P[2], 6);
                 break;
 
             case 4:
                 bindScreenTexture(0);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 30, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, 30, 6);
                 bindScreenTexture(1);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 36, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, 36, 6);
                 bindScreenTexture(2);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 42, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, 42, 6);
                 bindScreenTexture(3);
-                rsxDrawArrays(ctx, GCM_TYPE_TRIANGLES, 48, 6);
+                rsxDrawVertexArray(ctx, GCM_TYPE_TRIANGLES, 48, 6);
                 break;
 #endif
         }
@@ -810,7 +800,7 @@ bool RenderDevice::SetupRendering()
     if (gcmContext) {
         uint16 width = videoSettings.fsWidth ? (uint16)videoSettings.fsWidth : 1280;
         uint16 height = videoSettings.fsHeight ? (uint16)videoSettings.fsHeight : 720;
-        gcmSetScissor((gcmContextData *)gcmContext, 0, 0, width, height);
+        rsxSetScissor((gcmContextData *)gcmContext, 0, 0, width, height);
     }
 #endif
     return true;

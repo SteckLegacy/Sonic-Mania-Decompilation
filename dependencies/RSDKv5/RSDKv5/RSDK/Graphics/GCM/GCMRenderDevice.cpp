@@ -261,12 +261,15 @@ bool RenderDevice::InitGraphicsAPI()
     // 3) cellVideoConfigure() / set native resolution
     // 4) cellGcmInit() / initialize GCM
 
+    PrintLog(PRINT_NORMAL, "GCM: Starting RSX/GCM Graphics API initialization...");
+
 #if RETRO_INPUTDEVICE_SDL2 || RETRO_AUDIODEVICE_SDL2
     SDL_InitSubSystem(SDL_INIT_EVENTS);
 #endif
 
 #if RETRO_PLATFORM == RETRO_PS3
     cellVideoInit();
+    PrintLog(PRINT_NORMAL, "GCM: cellVideoInit() called.");
 
     videoState state;
     memset(&state, 0, sizeof(videoState));
@@ -274,6 +277,7 @@ bool RenderDevice::InitGraphicsAPI()
         PrintLog(PRINT_NORMAL, "GCM: Failed to query video state.");
         return false;
     }
+    PrintLog(PRINT_NORMAL, "GCM: Video state queried (resolution id: %d, state: %d).", state.displayMode.resolution, state.state);
 
     videoResolution res;
     memset(&res, 0, sizeof(videoResolution));
@@ -281,6 +285,7 @@ bool RenderDevice::InitGraphicsAPI()
         res.width = 1280;
         res.height = 720;
     }
+    PrintLog(PRINT_NORMAL, "GCM: Target display resolution: %dx%d.", res.width, res.height);
 
     videoConfiguration vconfig;
     memset(&vconfig, 0, sizeof(videoConfiguration));
@@ -291,6 +296,9 @@ bool RenderDevice::InitGraphicsAPI()
 
     if (cellVideoConfigure(0, &vconfig, NULL, 0) != 0) {
         PrintLog(PRINT_NORMAL, "GCM: Warning: cellVideoConfigure failed, continuing with current state.");
+    }
+    else {
+        PrintLog(PRINT_NORMAL, "GCM: cellVideoConfigure() succeeded (pitch: %d).", vconfig.pitch);
     }
 
     // Wait until RSX video state is ready with timeout
@@ -351,8 +359,10 @@ bool RenderDevice::InitGraphicsAPI()
         PrintLog(PRINT_NORMAL, "GCM: Failed to allocate aligned host command buffer.");
         return false;
     }
+    PrintLog(PRINT_NORMAL, "GCM: Host command buffer allocated (%p, %d bytes).", hostCmdBuffer, hostCmdBufferSize);
 
     cellGcmInit(cmdBufferSize, hostCmdBufferSize, hostCmdBuffer);
+    PrintLog(PRINT_NORMAL, "GCM: cellGcmInit() completed.");
 
     // REQ 3: Framebuffer allocation in RSX local memory (VRAM):
     // - 24 MB total framebuffer pool (8 MB per buffer x 3: Color 0, Color 1, Depth/Z)
@@ -372,18 +382,21 @@ bool RenderDevice::InitGraphicsAPI()
 
         AddressToOffset(frameBufferLocalMem[i], &frameBufferOffset[i]);
         cellGcmSetDisplayBuffer(i, frameBufferOffset[i], frameBufferPitch, width, height);
+        PrintLog(PRINT_NORMAL, "GCM: Display buffer %d allocated at offset 0x%08X (addr: %p, pitch: %d).", i, frameBufferOffset[i], frameBufferLocalMem[i], frameBufferPitch);
     }
 
     // Allocate 32-bit Z-Buffer (Depth buffer) in RSX memory (8 MB)
     depthBufferLocalMem = AllocLocalMemory(64 * 1024, perBufferFbSize);
     if (depthBufferLocalMem) {
         AddressToOffset(depthBufferLocalMem, &depthBufferOffset);
+        PrintLog(PRINT_NORMAL, "GCM: Depth buffer allocated at offset 0x%08X (addr: %p).", depthBufferOffset, depthBufferLocalMem);
     }
 
     // Allocate RSX vertex buffer memory
     vertexBufferLocalMem = AllocLocalMemory(128, sizeof(RenderVertex) * 60);
     if (vertexBufferLocalMem) {
         AddressToOffset(vertexBufferLocalMem, &vertexBufferOffset);
+        PrintLog(PRINT_NORMAL, "GCM: Vertex buffer allocated at offset 0x%08X (addr: %p).", vertexBufferOffset, vertexBufferLocalMem);
     }
 
     // Allocate RSX screen textures
@@ -393,6 +406,7 @@ bool RenderDevice::InitGraphicsAPI()
         screenTextureLocalMem[s] = AllocLocalMemory(64, screenTexSize);
         if (screenTextureLocalMem[s]) {
             AddressToOffset(screenTextureLocalMem[s], &screenTextureOffset[s]);
+            PrintLog(PRINT_NORMAL, "GCM: Screen texture %d allocated at offset 0x%08X (pitch: %d).", s, screenTextureOffset[s], screenTexturePitch);
         }
     }
 
@@ -411,15 +425,20 @@ bool RenderDevice::InitGraphicsAPI()
     fragmentShaderSize = (shader_fpo && shader_fpo_end) ? (uint32)(shader_fpo_end - shader_fpo) : sizeof(cgFragmentProgramUcode);
     fragmentShaderHostDesc = fShaderData;
 
+    PrintLog(PRINT_NORMAL, "GCM: Loading injected shaders (vpo: %p, size: %d, fpo: %p, size: %d).",
+             shader_vpo, vertexShaderSize, shader_fpo, fragmentShaderSize);
+
     if (vertexShaderBytes) {
         u32 vpsize = 0;
         rsxVertexProgramGetUCode((const rsxVertexProgram *)vertexShaderBytes, &vertexShaderUcode, &vpsize);
+        PrintLog(PRINT_NORMAL, "GCM: Vertex shader ucode extracted: %p (size: %d).", vertexShaderUcode, vpsize);
     }
 
     void *fp_ucode = nullptr;
     u32 fpsize = 0;
     if (fragmentShaderHostDesc) {
         rsxFragmentProgramGetUCode((const rsxFragmentProgram *)fragmentShaderHostDesc, &fp_ucode, &fpsize);
+        PrintLog(PRINT_NORMAL, "GCM: Fragment shader ucode extracted: %p (size: %d).", fp_ucode, fpsize);
     }
 
     if (!fp_ucode || !fpsize) {
@@ -433,6 +452,9 @@ bool RenderDevice::InitGraphicsAPI()
         if (!AddressToOffset(fragmentShaderLocalMem, &fragmentShaderOffset)) {
             PrintLog(PRINT_NORMAL, "GCM: Failed to map Cg fragment program address to RSX offset.");
         }
+        else {
+            PrintLog(PRINT_NORMAL, "GCM: Fragment shader microcode mapped to RSX offset 0x%08X.", fragmentShaderOffset);
+        }
     }
 
     // Set GCM flip mode (VSYNC)
@@ -441,9 +463,11 @@ bool RenderDevice::InitGraphicsAPI()
     WaitRSXIdle();
 
     SetRenderTarget(currentBuffer);
+    PrintLog(PRINT_NORMAL, "GCM: Set initial render target %d successfully.", currentBuffer);
 
 #endif // RETRO_PLATFORM == RETRO_PS3
 
+    PrintLog(PRINT_NORMAL, "GCM: Graphics API initialization completed successfully.");
     return true;
 }
 

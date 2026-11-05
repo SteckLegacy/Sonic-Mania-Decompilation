@@ -228,6 +228,8 @@ void RSDK::LoadStream(ChannelInfo *channel)
         vorbisAlloc.alloc_buffer = NULL;
     }
 
+    DefragmentAndGarbageCollectStorage(DATASET_MUS);
+
     FileInfo info;
     InitFileInfo(&info);
 
@@ -539,10 +541,27 @@ void RSDK::SetChannelAttributes(uint8 channel, float volume, float panning, floa
         panning               = fmaxf(-1.0f, panning);
         channels[channel].pan = panning;
 
-        if (speed > 0.0f)
-            channels[channel].speed = (int32)(speed * TO_FIXED(1));
-        else if (speed == 1.0f)
-            channels[channel].speed = TO_FIXED(1);
+        bool32 isStream = (channels[channel].state == CHANNEL_STREAM || channels[channel].state == (CHANNEL_STREAM | CHANNEL_PAUSED)
+                           || channels[channel].state == CHANNEL_LOADING_STREAM || channels[channel].soundID == 0xFF);
+
+        if (isStream) {
+            float bgmSpeeds[]  = { 0.75f, 1.0f, 1.25f };
+            int32 speedIdx     = (engine.bgmSpeed >= 0 && engine.bgmSpeed <= 2) ? engine.bgmSpeed : 1;
+            float bgmSpeedMult = bgmSpeeds[speedIdx];
+
+            if (speed == 1.0f) {
+                channels[channel].speed = (int32)(bgmSpeedMult * TO_FIXED(1));
+            }
+            else if (speed > 0.0f) {
+                channels[channel].speed = (int32)(speed * bgmSpeedMult * TO_FIXED(1));
+            }
+        }
+        else {
+            if (speed > 0.0f)
+                channels[channel].speed = (int32)(speed * TO_FIXED(1));
+            else if (speed == 1.0f)
+                channels[channel].speed = TO_FIXED(1);
+        }
     }
 }
 

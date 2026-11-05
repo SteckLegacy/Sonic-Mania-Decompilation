@@ -134,7 +134,6 @@ void RSDK::LoadSceneFolder()
     // Clear stage storage
     DefragmentAndGarbageCollectStorage(DATASET_STG);
     DefragmentAndGarbageCollectStorage(DATASET_SFX);
-    DefragmentAndGarbageCollectStorage(DATASET_MUS);
 
     for (int32 s = 0; s < SCREEN_COUNT; ++s) {
         screens[s].position.x = 0;

@@ -31,7 +31,7 @@ SOURCES		:=	\
 	../dependencies/RSDKv5/RSDKv5/RSDK/Scene/      		\
 	../dependencies/RSDKv5/RSDKv5/RSDK/Scene/Objects/ 	\
 	../dependencies/RSDKv5/RSDKv5/RSDK/User/Core/  		\
-	../dependencies/RSDKv5/dependencies/all/pugixml 	\
+	../dependencies/RSDKv5/dependencies/all/Pugixml 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser 	\
 	../dependencies/RSDKv5/dependencies/all/miniz   	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
@@ -41,7 +41,7 @@ DATA		:=	data
 INCLUDES	:=	\
 	../dependencies/RSDKv5/RSDKv5/ 						\
 	../dependencies/RSDKv5/dependencies/all/ 			\
-	../dependencies/RSDKv5/dependencies/all/pugixml/ 	\
+	../dependencies/RSDKv5/dependencies/all/Pugixml/ 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser/	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
 	../SonicMania/   									\

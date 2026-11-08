@@ -772,17 +772,17 @@ void RSDK::LoadGameXML(bool pal)
         SetActiveMod(m);
         InitFileInfo(&info);
         if (LoadFile(&info, "Data/Game/Game.xml", FMODE_RB)) {
-            tinyxml2::XMLDocument *doc = new tinyxml2::XMLDocument;
+            pugi::xml_document *doc = new pugi::xml_document;
 
             char *xmlData = new char[info.fileSize + 1];
             ReadBytes(&info, xmlData, info.fileSize);
             xmlData[info.fileSize] = 0;
             CloseFile(&info);
 
-            doc->Parse(xmlData);
-            const tinyxml2::XMLElement *gameElement = doc->FirstChildElement("game"); // gameElement is nullptr if parse failure
+            pugi::xml_parse_result result = doc->load_buffer_inplace(xmlData, info.fileSize, pugi::parse_default);
+            pugi::xml_node gameElement    = doc->child("game");
 
-            if (gameElement) {
+            if (result && gameElement) {
                 if (pal)
                     LoadXMLPalettes(gameElement);
                 else {
@@ -803,63 +803,49 @@ void RSDK::LoadGameXML(bool pal)
     SetActiveMod(-1);
 }
 
-void RSDK::LoadXMLWindowText(const tinyxml2::XMLElement *gameElement)
+void RSDK::LoadXMLWindowText(const pugi::xml_node &gameElement)
 {
-    const tinyxml2::XMLElement *titleElement = gameElement->FirstChildElement("title");
+    pugi::xml_node titleElement = gameElement.child("title");
     if (titleElement) {
-        const tinyxml2::XMLAttribute *nameAttr = titleElement->FindAttribute("name");
+        pugi::xml_attribute nameAttr = titleElement.attribute("name");
         if (nameAttr)
-            strcpy(gameVerInfo.gameTitle, nameAttr->Value());
+            strcpy(gameVerInfo.gameTitle, nameAttr.value());
     }
 }
 
-void RSDK::LoadXMLPalettes(const tinyxml2::XMLElement *gameElement)
+void RSDK::LoadXMLPalettes(const pugi::xml_node &gameElement)
 {
-    const tinyxml2::XMLElement *paletteElement = gameElement->FirstChildElement("palette");
+    pugi::xml_node paletteElement = gameElement.child("palette");
     if (paletteElement) {
-        for (const tinyxml2::XMLElement *clrElement = paletteElement->FirstChildElement("color"); clrElement;
-            clrElement                             = clrElement->NextSiblingElement("color")) {
-            const tinyxml2::XMLAttribute *bankAttr = clrElement->FindAttribute("bank");
-            int32 bank                             = 0;
-            if (bankAttr)
-                bank = bankAttr->IntValue();
+        for (pugi::xml_node clrElement = paletteElement.child("color"); clrElement;
+            clrElement                 = clrElement.next_sibling("color")) {
+            pugi::xml_attribute bankAttr = clrElement.attribute("bank");
+            int32 bank                   = bankAttr ? bankAttr.as_int() : 0;
 
-            const tinyxml2::XMLAttribute *indAttr = clrElement->FindAttribute("index");
-            int32 index                           = 0;
-            if (indAttr)
-                index = indAttr->IntValue();
+            pugi::xml_attribute indAttr = clrElement.attribute("index");
+            int32 index                 = indAttr ? indAttr.as_int() : 0;
 
-            const tinyxml2::XMLAttribute *rAttr = clrElement->FindAttribute("r");
-            int32 r                             = 0;
-            if (rAttr)
-                r = rAttr->IntValue();
+            pugi::xml_attribute rAttr = clrElement.attribute("r");
+            int32 r                   = rAttr ? rAttr.as_int() : 0;
 
-            const tinyxml2::XMLAttribute *gAttr = clrElement->FindAttribute("g");
-            int32 g                             = 0;
-            if (gAttr)
-                g = gAttr->IntValue();
+            pugi::xml_attribute gAttr = clrElement.attribute("g");
+            int32 g                   = gAttr ? gAttr.as_int() : 0;
 
-            const tinyxml2::XMLAttribute *bAttr = clrElement->FindAttribute("b");
-            int32 b                             = 0;
-            if (bAttr)
-                b = bAttr->IntValue();
+            pugi::xml_attribute bAttr = clrElement.attribute("b");
+            int32 b                   = bAttr ? bAttr.as_int() : 0;
 
             SetPaletteEntry(bank, index, (r << 16) | (g << 8) | b);
         }
 
-        for (const tinyxml2::XMLElement *clrsElement = paletteElement->FirstChildElement("colors"); clrsElement;
-            clrsElement                             = clrsElement->NextSiblingElement("colors")) {
-            const tinyxml2::XMLAttribute *bankAttr = clrsElement->FindAttribute("bank");
-            int32 bank                             = 0;
-            if (bankAttr)
-                bank = bankAttr->IntValue();
+        for (pugi::xml_node clrsElement = paletteElement.child("colors"); clrsElement;
+            clrsElement                 = clrsElement.next_sibling("colors")) {
+            pugi::xml_attribute bankAttr = clrsElement.attribute("bank");
+            int32 bank                   = bankAttr ? bankAttr.as_int() : 0;
 
-            const tinyxml2::XMLAttribute *indAttr = clrsElement->FindAttribute("start");
-            int32 index                           = 0;
-            if (indAttr)
-                index = indAttr->IntValue();
+            pugi::xml_attribute indAttr = clrsElement.attribute("start");
+            int32 index                 = indAttr ? indAttr.as_int() : 0;
 
-            std::string text = clrsElement->GetText();
+            std::string text = clrsElement.child_value();
             // working: AABBFF #FFaaFF (12,32,34) (145 53 234)
             std::regex search(R"((?:#?([0-9A-F]{6}))|(?:\((\d+),?\s*(\d+),?\s*(\d+)\)))",
                               std::regex_constants::icase | std::regex_constants::ECMAScript);
@@ -885,16 +871,14 @@ void RSDK::LoadXMLPalettes(const tinyxml2::XMLElement *gameElement)
     }
 }
 
-void RSDK::LoadXMLObjects(const tinyxml2::XMLElement *gameElement)
+void RSDK::LoadXMLObjects(const pugi::xml_node &gameElement)
 {
-    const tinyxml2::XMLElement *objectsElement = gameElement->FirstChildElement("objects");
+    pugi::xml_node objectsElement = gameElement.child("objects");
     if (objectsElement) {
-        for (const tinyxml2::XMLElement *objElement = objectsElement->FirstChildElement("object"); objElement;
-            objElement                             = objElement->NextSiblingElement("object")) {
-            const tinyxml2::XMLAttribute *nameAttr = objElement->FindAttribute("name");
-            const char *objName                    = "unknownObject";
-            if (nameAttr)
-                objName = nameAttr->Value();
+        for (pugi::xml_node objElement = objectsElement.child("object"); objElement;
+            objElement                 = objElement.next_sibling("object")) {
+            pugi::xml_attribute nameAttr = objElement.attribute("name");
+            const char *objName          = nameAttr ? nameAttr.value() : "unknownObject";
 
             RETRO_HASH_MD5(hash);
             GEN_HASH_MD5(objName, hash);
@@ -909,21 +893,17 @@ void RSDK::LoadXMLObjects(const tinyxml2::XMLElement *gameElement)
     }
 }
 
-void RSDK::LoadXMLSoundFX(const tinyxml2::XMLElement *gameElement)
+void RSDK::LoadXMLSoundFX(const pugi::xml_node &gameElement)
 {
-    const tinyxml2::XMLElement *soundsElement = gameElement->FirstChildElement("sounds");
+    pugi::xml_node soundsElement = gameElement.child("sounds");
     if (soundsElement) {
-        for (const tinyxml2::XMLElement *sfxElement = soundsElement->FirstChildElement("soundfx"); sfxElement;
-            sfxElement                             = sfxElement->NextSiblingElement("soundfx")) {
-            const tinyxml2::XMLAttribute *valAttr = sfxElement->FindAttribute("path");
-            const char *sfxPath                   = "unknownSFX.wav";
-            if (valAttr)
-                sfxPath = valAttr->Value();
+        for (pugi::xml_node sfxElement = soundsElement.child("soundfx"); sfxElement;
+            sfxElement                 = sfxElement.next_sibling("soundfx")) {
+            pugi::xml_attribute valAttr = sfxElement.attribute("path");
+            const char *sfxPath         = valAttr ? valAttr.value() : "unknownSFX.wav";
 
-            const tinyxml2::XMLAttribute *playsAttr = sfxElement->FindAttribute("maxConcurrentPlays");
-            int32 maxConcurrentPlays                = 0;
-            if (playsAttr)
-                maxConcurrentPlays = playsAttr->IntValue();
+            pugi::xml_attribute playsAttr = sfxElement.attribute("maxConcurrentPlays");
+            int32 maxConcurrentPlays      = playsAttr ? playsAttr.as_int() : 0;
 
             LoadSfx((char *)sfxPath, maxConcurrentPlays, SCOPE_GLOBAL);
         }
@@ -935,18 +915,16 @@ std::vector<SceneListEntry> listData;
 std::vector<SceneListInfo> listCategory;
 #endif
 
-void RSDK::LoadXMLStages(const tinyxml2::XMLElement *gameElement)
+void RSDK::LoadXMLStages(const pugi::xml_node &gameElement)
 {
 
-    for (const tinyxml2::XMLElement *listElement = gameElement->FirstChildElement("category"); listElement;
-        listElement                             = listElement->NextSiblingElement("category")) {
+    for (pugi::xml_node listElement = gameElement.child("category"); listElement;
+        listElement                 = listElement.next_sibling("category")) {
         SceneListInfo *list = nullptr;
         int32 listID;
 
-        const tinyxml2::XMLAttribute *nameAttr = listElement->FindAttribute("name");
-        const char *lstName                    = "unknown list";
-        if (nameAttr)
-            lstName = nameAttr->Value();
+        pugi::xml_attribute nameAttr = listElement.attribute("name");
+        const char *lstName          = nameAttr ? nameAttr.value() : "unknown list";
         RETRO_HASH_MD5(hash);
         GEN_HASH_MD5(lstName, hash);
 
@@ -969,28 +947,20 @@ void RSDK::LoadXMLStages(const tinyxml2::XMLElement *gameElement)
             sceneInfo.categoryCount++;
         }
 
-        for (const tinyxml2::XMLElement *stgElement = listElement->FirstChildElement("stage"); stgElement;
-            stgElement                             = stgElement->NextSiblingElement("stage")) {
-            const tinyxml2::XMLAttribute *nameAttr = stgElement->FindAttribute("name");
-            const char *stgName                    = "unknownStage";
-            if (nameAttr)
-                stgName = nameAttr->Value();
+        for (pugi::xml_node stgElement = listElement.child("stage"); stgElement;
+            stgElement                 = stgElement.next_sibling("stage")) {
+            pugi::xml_attribute nameAttr = stgElement.attribute("name");
+            const char *stgName          = nameAttr ? nameAttr.value() : "unknownStage";
 
-            const tinyxml2::XMLAttribute *folderAttr = stgElement->FindAttribute("folder");
-            const char *stgFolder                    = "unknownStageFolder";
-            if (folderAttr)
-                stgFolder = folderAttr->Value();
+            pugi::xml_attribute folderAttr = stgElement.attribute("folder");
+            const char *stgFolder          = folderAttr ? folderAttr.value() : "unknownStageFolder";
 
-            const tinyxml2::XMLAttribute *idAttr = stgElement->FindAttribute("id");
-            const char *stgID                    = "unknownStageID";
-            if (idAttr)
-                stgID = idAttr->Value();
+            pugi::xml_attribute idAttr = stgElement.attribute("id");
+            const char *stgID          = idAttr ? idAttr.value() : "unknownStageID";
 
 #if RETRO_REV02
-            const tinyxml2::XMLAttribute *filterAttr = stgElement->FindAttribute("filter");
-            int32 stgFilter                          = 0;
-            if (stgFilter)
-                stgFilter = filterAttr->IntValue();
+            pugi::xml_attribute filterAttr = stgElement.attribute("filter");
+            int32 stgFilter                = filterAttr ? filterAttr.as_int() : 0;
 #endif
             listData.emplace(listData.begin() + list->sceneOffsetEnd);
             SceneListEntry *scene = &listData[list->sceneOffsetEnd];

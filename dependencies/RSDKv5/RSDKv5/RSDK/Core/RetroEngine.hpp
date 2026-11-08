@@ -796,11 +796,11 @@ void StartGameObjects();
 
 #if RETRO_USE_MOD_LOADER
 void LoadGameXML(bool pal = false);
-void LoadXMLWindowText(const tinyxml2::XMLElement *gameElement);
-void LoadXMLPalettes(const tinyxml2::XMLElement *gameElement);
-void LoadXMLObjects(const tinyxml2::XMLElement* gameElement);
-void LoadXMLSoundFX(const tinyxml2::XMLElement* gameElement);
-void LoadXMLStages(const tinyxml2::XMLElement* gameElement);
+void LoadXMLWindowText(const pugi::xml_node &gameElement);
+void LoadXMLPalettes(const pugi::xml_node &gameElement);
+void LoadXMLObjects(const pugi::xml_node &gameElement);
+void LoadXMLSoundFX(const pugi::xml_node &gameElement);
+void LoadXMLStages(const pugi::xml_node &gameElement);
 #endif
 
 void LoadGameConfig();

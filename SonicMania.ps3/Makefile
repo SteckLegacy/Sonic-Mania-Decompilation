@@ -31,7 +31,7 @@ SOURCES		:=	\
 	../dependencies/RSDKv5/RSDKv5/RSDK/Scene/      		\
 	../dependencies/RSDKv5/RSDKv5/RSDK/Scene/Objects/ 	\
 	../dependencies/RSDKv5/RSDKv5/RSDK/User/Core/  		\
-	../dependencies/RSDKv5/dependencies/all/tinyxml2 	\
+	../dependencies/RSDKv5/dependencies/all/pugixml 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser 	\
 	../dependencies/RSDKv5/dependencies/all/miniz   	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
@@ -41,7 +41,7 @@ DATA		:=	data
 INCLUDES	:=	\
 	../dependencies/RSDKv5/RSDKv5/ 						\
 	../dependencies/RSDKv5/dependencies/all/ 			\
-	../dependencies/RSDKv5/dependencies/all/tinyxml2/ 	\
+	../dependencies/RSDKv5/dependencies/all/pugixml/ 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser/	\
 	../dependencies/RSDKv5/dependencies/all/stb			\
 	../SonicMania/   									\
@@ -64,42 +64,37 @@ CONTENTID	:=	UP0001-$(APPID)_00-SONICMANIAPS3000
 # but if you take out the separator and move it up the flag -freorder-blocks-algorithm=stc, it works mysteriously
 # below and the complete table with a small change.
 
-EXTRA_OFLAGS = -falign-functions  -falign-jumps \
--falign-labels  -falign-loops \
+EXTRA_OFLAGS = -falign-functions -falign-jumps \
+-falign-labels -falign-loops \
 -fcaller-saves \
 -fcrossjumping \
--fcse-follow-jumps  -fcse-skip-blocks \
+-fcse-follow-jumps -fcse-skip-blocks \
 -fdelete-null-pointer-checks \
--fdevirtualize  -fdevirtualize-speculatively \
+-fdevirtualize -fdevirtualize-speculatively \
 -fexpensive-optimizations \
 -fsplit-loops \
--fgcse  -fgcse-lm \
+-fgcse -fgcse-lm \
 -fhoist-adjacent-loads \
 -finline-functions \
 -finline-small-functions \
 -findirect-inlining \
--fipa-bit-cp  -fipa-cp  -fipa-icf \
--fipa-ra  -fipa-sra  -fipa-vrp \
+-fipa-bit-cp -fipa-cp -fipa-icf \
+-fipa-ra -fipa-sra -fipa-vrp \
 -fisolate-erroneous-paths-dereference \
 -flra-remat \
 -foptimize-sibling-calls \
 -foptimize-strlen \
 -fpartial-inlining \
 -fpeephole2 \
--fcode-hoisting
 -freorder-blocks-algorithm=stc \
--freorder-blocks-and-partition  -freorder-functions \
+-freorder-functions \
 -frerun-cse-after-loop \
--fschedule-insns -fschedule-insns2 \
--fsched-interblock  -fsched-spec \
+-fschedule-insns2 \
 -fstore-merging \
--fstrict-aliasing \
 -fthread-jumps \
 -ftree-builtin-call-dce \
--ftree-loop-vectorize \
 -ftree-pre \
--ftree-slp-vectorize \
--ftree-switch-conversion  -ftree-tail-merge \
+-ftree-switch-conversion -ftree-tail-merge \
 -ftree-vrp \
 -fvect-cost-model=cheap
 

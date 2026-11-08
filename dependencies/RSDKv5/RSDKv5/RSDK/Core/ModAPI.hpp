@@ -7,7 +7,7 @@
 #include <sstream>
 #include <map>
 #include <regex>
-#include "tinyxml2.h"
+#include "pugixml.hpp"
 
 #include <functional>
 #endif

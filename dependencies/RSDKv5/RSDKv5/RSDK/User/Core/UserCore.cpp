@@ -136,9 +136,26 @@ void RSDK::SKU::InitUserCore()
 #endif
 #endif
 }
+static bool s_userDataDirty = false;
+
+void RSDK::SKU::FlushUserDataIfDirty()
+{
+    if (s_userDataDirty) {
+        s_userDataDirty = false;
+#if RETRO_USERCORE_DUMMY
+        int32 achievementsRAM[0x100];
+        memset(achievementsRAM, 0, 0x100 * sizeof(int32));
+        for (int32 i = 0; i < (int32)achievementList.size(); ++i) {
+            achievementsRAM[i] = achievementList[i].achieved;
+        }
+        SaveUserFile("Achievements.bin", achievementsRAM, 0x100 * sizeof(int32));
+#endif
+    }
+}
+
 void RSDK::SKU::ReleaseUserCore()
 {
-    SaveUserData();
+    FlushUserDataIfDirty();
 
 #if RETRO_REV02
 
@@ -180,14 +197,7 @@ void RSDK::SKU::ReleaseUserCore()
 
 void RSDK::SKU::SaveUserData()
 {
-#if RETRO_USERCORE_DUMMY
-    int32 achievementsRAM[0x100];
-    memset(achievementsRAM, 0, 0x100 * sizeof(int32));
-    for (int32 i = 0; i < (int32)achievementList.size(); ++i) {
-        achievementsRAM[i] = achievementList[i].achieved;
-    }
-    SaveUserFile("Achievements.bin", achievementsRAM, 0x100 * sizeof(int32));
-#endif
+    s_userDataDirty = true;
 }
 
 // Found this in Switch 1.00, doesn't seem to show up in rev02 variants but its neat nonetheless

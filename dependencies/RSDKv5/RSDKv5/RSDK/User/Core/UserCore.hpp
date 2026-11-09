@@ -136,6 +136,7 @@ extern UserCore *userCore;
 void InitUserCore();
 void ReleaseUserCore();
 void SaveUserData();
+void FlushUserDataIfDirty();
 
 #if RETRO_REV02
 void HandleUserStatuses();

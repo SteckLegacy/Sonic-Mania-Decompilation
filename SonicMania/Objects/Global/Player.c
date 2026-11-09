@@ -718,6 +718,14 @@ void Player_StageLoad(void)
         Player->playerCount    = 2;
         EntityPlayer *sidekick = RSDK_GET_ENTITY(SLOT_PLAYER2, Player);
         sidekick->playerID     = 1;
+
+        Player->sonicFrames      = RSDK.LoadSpriteAnimation("Players/Sonic.bin", SCOPE_GLOBAL);
+        Player->superFrames      = RSDK.LoadSpriteAnimation("Players/SuperSonic.bin", SCOPE_GLOBAL);
+        Player->tailsFrames      = RSDK.LoadSpriteAnimation("Players/Tails.bin", SCOPE_GLOBAL);
+        Player->tailsTailsFrames = RSDK.LoadSpriteAnimation("Players/TailSprite.bin", SCOPE_GLOBAL);
+        Player->knuxFrames       = RSDK.LoadSpriteAnimation("Players/Knux.bin", SCOPE_GLOBAL);
+        Player->mightyFrames     = RSDK.LoadSpriteAnimation("Players/Mighty.bin", SCOPE_GLOBAL);
+        Player->rayFrames        = RSDK.LoadSpriteAnimation("Players/Ray.bin", SCOPE_GLOBAL);
     }
     else {
         Player->playerCount = RSDK.GetEntityCount(Player->classID, false);
@@ -976,8 +984,10 @@ void Player_ChangeCharacter(EntityPlayer *entity, int32 character)
     switch (entity->characterID) {
         default:
         case ID_SONIC:
-            Player->sonicFrames = RSDK.LoadSpriteAnimation("Players/Sonic.bin", SCOPE_STAGE);
-            Player->superFrames = RSDK.LoadSpriteAnimation("Players/SuperSonic.bin", SCOPE_STAGE);
+            if (globals->gameMode != MODE_ENCORE) {
+                Player->sonicFrames = RSDK.LoadSpriteAnimation("Players/Sonic.bin", SCOPE_STAGE);
+                Player->superFrames = RSDK.LoadSpriteAnimation("Players/SuperSonic.bin", SCOPE_STAGE);
+            }
             if (SizeLaser)
                 SizeLaser->sonicFrames = RSDK.LoadSpriteAnimation("Players/ChibiSonic.bin", SCOPE_STAGE);
 
@@ -1006,8 +1016,10 @@ void Player_ChangeCharacter(EntityPlayer *entity, int32 character)
             break;
 
         case ID_TAILS:
-            Player->tailsFrames      = RSDK.LoadSpriteAnimation("Players/Tails.bin", SCOPE_STAGE);
-            Player->tailsTailsFrames = RSDK.LoadSpriteAnimation("Players/TailSprite.bin", SCOPE_STAGE);
+            if (globals->gameMode != MODE_ENCORE) {
+                Player->tailsFrames      = RSDK.LoadSpriteAnimation("Players/Tails.bin", SCOPE_STAGE);
+                Player->tailsTailsFrames = RSDK.LoadSpriteAnimation("Players/TailSprite.bin", SCOPE_STAGE);
+            }
             if (SizeLaser) {
                 SizeLaser->tailsFrames = RSDK.LoadSpriteAnimation("Players/ChibiTails.bin", SCOPE_STAGE);
                 SizeLaser->tailFrames  = RSDK.LoadSpriteAnimation("Players/CTailSprite.bin", SCOPE_STAGE);
@@ -1029,7 +1041,9 @@ void Player_ChangeCharacter(EntityPlayer *entity, int32 character)
             break;
 
         case ID_KNUCKLES:
-            Player->knuxFrames = RSDK.LoadSpriteAnimation("Players/Knux.bin", SCOPE_STAGE);
+            if (globals->gameMode != MODE_ENCORE) {
+                Player->knuxFrames = RSDK.LoadSpriteAnimation("Players/Knux.bin", SCOPE_STAGE);
+            }
             if (SizeLaser)
                 SizeLaser->knuxFrames = RSDK.LoadSpriteAnimation("Players/ChibiKnux.bin", SCOPE_STAGE);
 
@@ -1049,7 +1063,9 @@ void Player_ChangeCharacter(EntityPlayer *entity, int32 character)
 
 #if MANIA_USE_PLUS
         case ID_MIGHTY:
-            Player->mightyFrames = RSDK.LoadSpriteAnimation("Players/Mighty.bin", SCOPE_STAGE);
+            if (globals->gameMode != MODE_ENCORE) {
+                Player->mightyFrames = RSDK.LoadSpriteAnimation("Players/Mighty.bin", SCOPE_STAGE);
+            }
             if (SizeLaser)
                 SizeLaser->mightyFrames = RSDK.LoadSpriteAnimation("Players/ChibiMighty.bin", SCOPE_STAGE);
 
@@ -1068,7 +1084,9 @@ void Player_ChangeCharacter(EntityPlayer *entity, int32 character)
             break;
 
         case ID_RAY:
-            Player->rayFrames = RSDK.LoadSpriteAnimation("Players/Ray.bin", SCOPE_STAGE);
+            if (globals->gameMode != MODE_ENCORE) {
+                Player->rayFrames = RSDK.LoadSpriteAnimation("Players/Ray.bin", SCOPE_STAGE);
+            }
             if (SizeLaser)
                 SizeLaser->rayFrames = RSDK.LoadSpriteAnimation("Players/ChibiRay.bin", SCOPE_STAGE);
 

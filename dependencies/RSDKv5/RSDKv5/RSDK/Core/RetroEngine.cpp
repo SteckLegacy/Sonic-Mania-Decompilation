@@ -419,6 +419,7 @@ void RSDK::ProcessEngine()
 #if RETRO_VER_EGS || RETRO_USE_DUMMY_ACHIEVEMENTS
             SKU::ProcessAchievements();
 #endif
+            SKU::FlushUserDataIfDirty();
             ProcessObjectDrawLists();
             break;
 
@@ -512,6 +513,8 @@ void RSDK::ProcessEngine()
         case ENGINESTATE_DEVMENU:
             ProcessInput();
             currentScreen = &screens[0];
+
+            SKU::FlushUserDataIfDirty();
 
             if (devMenu.state)
                 devMenu.state();

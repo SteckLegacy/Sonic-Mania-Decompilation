@@ -23,6 +23,8 @@ SceneInfo RSDK::sceneInfo;
 
 void RSDK::LoadSceneFolder()
 {
+    SKU::FlushUserDataIfDirty();
+
 #if RETRO_PLATFORM == RETRO_ANDROID
     ShowLoadingIcon();
 #endif

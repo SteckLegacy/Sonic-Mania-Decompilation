@@ -99,7 +99,7 @@ EXTRA_OFLAGS = -falign-functions -falign-jumps \
 -fvect-cost-model=cheap
 
 RSDK_flags	=	-D__PS3__ -DRETRO_STANDALONE=0 -DRETRO_USE_MOD_LOADER=1 -DRETRO_DISABLE_LOG -DGAME_VERSION=5 -DPS3_CONSOLE_MODE
-CFLAGS		=	-g3 -O1 $(EXTRA_OFLAGS) -Wall -mcpu=cell $(MACHDEP) $(INCLUDE) $(RSDK_flags)
+CFLAGS		=	-g3 -O1 $(EXTRA_OFLAGS) -Wall -fpermissive -mcpu=cell $(MACHDEP) $(INCLUDE) $(RSDK_flags)
 CXXFLAGS	=	$(CFLAGS) -std=c++11
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map

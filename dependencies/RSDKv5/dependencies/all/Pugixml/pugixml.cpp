@@ -20,6 +20,13 @@
 #include <assert.h>
 #include <limits.h>
 
+#if defined(__PS3__)
+#	include <cstdio>
+#	include <cstdarg>
+extern "C" int snprintf(char* str, size_t size, const char* format, ...);
+extern "C" int vsnprintf(char* str, size_t size, const char* format, va_list ap);
+#endif
+
 #ifdef PUGIXML_WCHAR_MODE
 #	include <wchar.h>
 #endif
@@ -165,7 +172,9 @@ using std::free;
 #endif
 
 // Not all platforms have snprintf; we define a wrapper that uses snprintf if possible. This only works with buffers with a known size.
-#if __cplusplus >= 201103
+#if defined(__PS3__)
+#	define PUGI_IMPL_SNPRINTF(buf, ...) ::snprintf(buf, sizeof(buf), __VA_ARGS__)
+#elif __cplusplus >= 201103
 #	define PUGI_IMPL_SNPRINTF(buf, ...) snprintf(buf, sizeof(buf), __VA_ARGS__)
 #elif defined(PUGI_IMPL_MSVC_CRT_VERSION) && PUGI_IMPL_MSVC_CRT_VERSION >= 1400
 #	define PUGI_IMPL_SNPRINTF(buf, ...) _snprintf_s(buf, _countof(buf), _TRUNCATE, __VA_ARGS__)

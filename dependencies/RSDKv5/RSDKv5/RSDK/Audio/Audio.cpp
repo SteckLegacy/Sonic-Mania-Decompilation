@@ -21,7 +21,7 @@ static VorbisMemoryStream s_vorbisMemStream;
 static size_t VorbisMemRead(void *ptr, size_t size, size_t nmemb, void *datasource)
 {
     VorbisMemoryStream *ms = (VorbisMemoryStream *)datasource;
-    if (!ms || !ms->data)
+    if (!ms || !ms->data || size == 0)
         return 0;
 
     ogg_int64_t bytesToRead = (ogg_int64_t)size * nmemb;

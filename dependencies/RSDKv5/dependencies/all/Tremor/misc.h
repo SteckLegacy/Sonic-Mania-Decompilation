@@ -41,7 +41,19 @@
 #include <sys/types.h>
 #endif
 
-#if BYTE_ORDER==LITTLE_ENDIAN
+#if (defined(BYTE_ORDER) && defined(BIG_ENDIAN) && (BYTE_ORDER == BIG_ENDIAN)) || \
+    (defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)) || \
+    defined(__BIG_ENDIAN__) || defined(__PS3__) || defined(__ppc__) || defined(__PPC__)
+union magic {
+  struct {
+    ogg_int32_t hi;
+    ogg_int32_t lo;
+  } halves;
+  ogg_int64_t whole;
+};
+#elif (defined(BYTE_ORDER) && defined(LITTLE_ENDIAN) && (BYTE_ORDER == LITTLE_ENDIAN)) || \
+      (defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)) || \
+      defined(__LITTLE_ENDIAN__) || defined(_WIN32) || defined(__i386__) || defined(__x86_64__)
 union magic {
   struct {
     ogg_int32_t lo;
@@ -49,13 +61,11 @@ union magic {
   } halves;
   ogg_int64_t whole;
 };
-#endif 
-
-#if BYTE_ORDER==BIG_ENDIAN
+#else
 union magic {
   struct {
-    ogg_int32_t hi;
     ogg_int32_t lo;
+    ogg_int32_t hi;
   } halves;
   ogg_int64_t whole;
 };

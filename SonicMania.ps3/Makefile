@@ -34,7 +34,7 @@ SOURCES		:=	\
 	../dependencies/RSDKv5/dependencies/all/Pugixml 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser 	\
 	../dependencies/RSDKv5/dependencies/all/miniz   	\
-	../dependencies/RSDKv5/dependencies/all/stb			\
+	../dependencies/RSDKv5/dependencies/all/Tremor		\
 	../SonicMania/ 										\
 	../SonicMania/Objects
 DATA		:=	data
@@ -43,7 +43,7 @@ INCLUDES	:=	\
 	../dependencies/RSDKv5/dependencies/all/ 			\
 	../dependencies/RSDKv5/dependencies/all/Pugixml/ 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser/	\
-	../dependencies/RSDKv5/dependencies/all/stb			\
+	../dependencies/RSDKv5/dependencies/all/Tremor		\
 	../SonicMania/   									\
 	../SonicMania/Objects
 PKGFILES	:=	../pkgfiles
@@ -134,7 +134,7 @@ export BUILDDIR	:=	$(CURDIR)/$(BUILD)
 #---------------------------------------------------------------------------------
 # automatically build a list of object files for our project
 #---------------------------------------------------------------------------------
-CFILES		:=	$(foreach dir,$(SOURCES),$(notdir ${wildcard $(dir)/*.c}))
+CFILES		:=	$(filter-out iseeking_example.c ivorbisfile_example.c,$(foreach dir,$(SOURCES),$(notdir ${wildcard $(dir)/*.c})))
 CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(subst xmltest.cpp,,${wildcard $(dir)/*.cpp})))
 sFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
 SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.S)))

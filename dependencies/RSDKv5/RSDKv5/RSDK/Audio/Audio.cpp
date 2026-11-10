@@ -6,13 +6,74 @@ using namespace RSDK;
 #include "Legacy/AudioLegacy.cpp"
 #endif
 
-#define STB_VORBIS_NO_PUSHDATA_API
-#define STB_VORBIS_NO_STDIO
-#define STB_VORBIS_NO_INTEGER_CONVERSION
-#include "stb_vorbis/stb_vorbis.c"
+#include "Tremor/ivorbisfile.h"
 
-stb_vorbis *vorbisInfo = NULL;
-stb_vorbis_alloc vorbisAlloc;
+typedef struct {
+    uint8 *data;
+    ogg_int64_t size;
+    ogg_int64_t pos;
+} VorbisMemoryStream;
+
+static OggVorbis_File s_vorbisFile;
+static bool32 s_vorbisOpened = false;
+static VorbisMemoryStream s_vorbisMemStream;
+
+static size_t VorbisMemRead(void *ptr, size_t size, size_t nmemb, void *datasource)
+{
+    VorbisMemoryStream *ms = (VorbisMemoryStream *)datasource;
+    if (!ms || !ms->data)
+        return 0;
+
+    ogg_int64_t bytesToRead = (ogg_int64_t)size * nmemb;
+    if (ms->pos + bytesToRead > ms->size) {
+        bytesToRead = ms->size - ms->pos;
+        if (bytesToRead < 0)
+            bytesToRead = 0;
+    }
+
+    memcpy(ptr, ms->data + ms->pos, bytesToRead);
+    ms->pos += bytesToRead;
+    return bytesToRead / size;
+}
+
+static int VorbisMemSeek(void *datasource, ogg_int64_t offset, int whence)
+{
+    VorbisMemoryStream *ms = (VorbisMemoryStream *)datasource;
+    if (!ms)
+        return -1;
+
+    switch (whence) {
+        case SEEK_SET: ms->pos = offset; break;
+        case SEEK_CUR: ms->pos += offset; break;
+        case SEEK_END: ms->pos = ms->size + offset; break;
+        default: return -1;
+    }
+
+    if (ms->pos < 0) {
+        ms->pos = 0;
+        return -1;
+    }
+    if (ms->pos > ms->size) {
+        ms->pos = ms->size;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int VorbisMemClose(void *datasource)
+{
+    return 0;
+}
+
+static long VorbisMemTell(void *datasource)
+{
+    VorbisMemoryStream *ms = (VorbisMemoryStream *)datasource;
+    if (!ms)
+        return -1;
+
+    return (long)ms->pos;
+}
 
 SFXInfo RSDK::sfxList[SFX_COUNT];
 ChannelInfo RSDK::channels[CHANNEL_COUNT];
@@ -46,10 +107,11 @@ uint8 AudioDeviceBase::audioFocus               = 0;
 
 void AudioDeviceBase::Release()
 {
-    // This is missing, meaning that the garbage collector will never reclaim stb_vorbis's buffer.
 #if !RETRO_USE_ORIGINAL_CODE
-    stb_vorbis_close(vorbisInfo);
-    vorbisInfo = NULL;
+    if (s_vorbisOpened) {
+        ov_clear(&s_vorbisFile);
+        s_vorbisOpened = false;
+    }
 #endif
 }
 
@@ -186,24 +248,39 @@ void RSDK::UpdateStreamBuffer(ChannelInfo *channel)
     int32 bufferRemaining = MIX_BUFFER_SIZE;
     float *buffer         = channel->samplePtr;
 
-    for (int32 s = 0; s < MIX_BUFFER_SIZE;) {
-        int32 samples = stb_vorbis_get_samples_float_interleaved(vorbisInfo, 2, buffer, bufferRemaining) * 2;
-        if (!samples) {
-            if (channel->loop == 1 && stb_vorbis_seek_frame(vorbisInfo, streamLoopPoint)) {
+    if (!s_vorbisOpened) {
+        channel->state   = CHANNEL_IDLE;
+        channel->soundID = -1;
+        memset(buffer, 0, sizeof(float) * bufferRemaining);
+        return;
+    }
+
+    while (bufferRemaining > 0) {
+        int16 pcmBuffer[1024];
+        int bitstream   = 0;
+        int bytesToRead = (bufferRemaining * (int32)sizeof(int16) > (int32)sizeof(pcmBuffer))
+                              ? sizeof(pcmBuffer)
+                              : (bufferRemaining * sizeof(int16));
+
+        long bytesRead = ov_read(&s_vorbisFile, (char *)pcmBuffer, bytesToRead, &bitstream);
+        if (bytesRead <= 0) {
+            if (channel->loop == 1 && ov_pcm_seek(&s_vorbisFile, streamLoopPoint) == 0) {
                 // we're looping & the seek was successful, get more samples
+                continue;
             }
             else {
                 channel->state   = CHANNEL_IDLE;
                 channel->soundID = -1;
                 memset(buffer, 0, sizeof(float) * bufferRemaining);
-
                 break;
             }
         }
 
-        s += samples;
-        buffer += samples;
-        bufferRemaining = MIX_BUFFER_SIZE - s;
+        int32 samplesRead = bytesRead / sizeof(int16);
+        for (int32 i = 0; i < samplesRead; ++i) {
+            *buffer++ = pcmBuffer[i] / 32768.0f;
+        }
+        bufferRemaining -= samplesRead;
     }
 
     for (int32 i = 0; i < MIX_BUFFER_SIZE; ++i) channel->samplePtr[i] *= 0.5f;
@@ -214,18 +291,14 @@ void RSDK::LoadStream(ChannelInfo *channel)
     if (channel->state != CHANNEL_LOADING_STREAM)
         return;
 
-    if (vorbisInfo) {
-        stb_vorbis_close(vorbisInfo);
-        vorbisInfo = NULL;
+    if (s_vorbisOpened) {
+        ov_clear(&s_vorbisFile);
+        s_vorbisOpened = false;
     }
 
     if (streamBuffer) {
         RemoveStorageEntry((void **)&streamBuffer);
         streamBuffer = NULL;
-    }
-    if (vorbisAlloc.alloc_buffer) {
-        RemoveStorageEntry((void **)&vorbisAlloc.alloc_buffer);
-        vorbisAlloc.alloc_buffer = NULL;
     }
 
     DefragmentAndGarbageCollectStorage(DATASET_MUS);
@@ -240,13 +313,20 @@ void RSDK::LoadStream(ChannelInfo *channel)
         CloseFile(&info);
 
         if (streamBufferSize > 0) {
-            vorbisAlloc.alloc_buffer_length_in_bytes = 512 * 1024; // 512KiB
-            AllocateStorage((void **)&vorbisAlloc.alloc_buffer, 512 * 1024, DATASET_MUS, false);
+            s_vorbisMemStream.data = streamBuffer;
+            s_vorbisMemStream.size = streamBufferSize;
+            s_vorbisMemStream.pos  = 0;
 
-            vorbisInfo = stb_vorbis_open_memory(streamBuffer, streamBufferSize, NULL, &vorbisAlloc);
-            if (vorbisInfo) {
+            ov_callbacks callbacks;
+            callbacks.read_func  = VorbisMemRead;
+            callbacks.seek_func  = VorbisMemSeek;
+            callbacks.close_func = VorbisMemClose;
+            callbacks.tell_func  = VorbisMemTell;
+
+            if (ov_open_callbacks(&s_vorbisMemStream, &s_vorbisFile, NULL, 0, callbacks) >= 0) {
+                s_vorbisOpened = true;
                 if (streamStartPos)
-                    stb_vorbis_seek(vorbisInfo, streamStartPos);
+                    ov_pcm_seek(&s_vorbisFile, streamStartPos);
                 UpdateStreamBuffer(channel);
 
                 channel->state = CHANNEL_STREAM;
@@ -255,9 +335,9 @@ void RSDK::LoadStream(ChannelInfo *channel)
     }
 
     if (channel->state == CHANNEL_LOADING_STREAM) {
-        if (vorbisAlloc.alloc_buffer) {
-            RemoveStorageEntry((void **)&vorbisAlloc.alloc_buffer);
-            vorbisAlloc.alloc_buffer = NULL;
+        if (s_vorbisOpened) {
+            ov_clear(&s_vorbisFile);
+            s_vorbisOpened = false;
         }
         if (streamBuffer) {
             RemoveStorageEntry((void **)&streamBuffer);
@@ -574,10 +654,14 @@ uint32 RSDK::GetChannelPos(uint32 channel)
         return channels[channel].bufferPos;
 
     if (channels[channel].state == CHANNEL_STREAM) {
-        if (!vorbisInfo->current_loc_valid || vorbisInfo->current_loc < 0)
+        if (!s_vorbisOpened)
             return 0;
 
-        return vorbisInfo->current_loc;
+        ogg_int64_t pos = ov_pcm_tell(&s_vorbisFile);
+        if (pos < 0)
+            return 0;
+
+        return (uint32)pos;
     }
 
     return 0;
@@ -585,8 +669,10 @@ uint32 RSDK::GetChannelPos(uint32 channel)
 
 double RSDK::GetVideoStreamPos()
 {
-    if (channels[0].state == CHANNEL_STREAM && AudioDevice::audioState && AudioDevice::initializedAudioChannels && vorbisInfo->current_loc_valid) {
-        return vorbisInfo->current_loc / (double)AUDIO_FREQUENCY;
+    if (channels[0].state == CHANNEL_STREAM && AudioDevice::audioState && AudioDevice::initializedAudioChannels && s_vorbisOpened) {
+        ogg_int64_t pos = ov_pcm_tell(&s_vorbisFile);
+        if (pos >= 0)
+            return (double)pos / (double)AUDIO_FREQUENCY;
     }
 
     return -1.0;

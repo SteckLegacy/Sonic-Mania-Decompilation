@@ -296,6 +296,7 @@ enum GameRegions {
 #define RETRO_RENDERDEVICE_GLFW (0)
 #define RETRO_RENDERDEVICE_VK   (0)
 #define RETRO_RENDERDEVICE_EGL  (0)
+#define RETRO_RENDERDEVICE_TINY3D (0)
 
 // ============================
 // AUDIO DEVICE BACKENDS
@@ -532,8 +533,13 @@ enum GameRegions {
 
 #elif RETRO_PLATFORM == RETRO_OSX || RETRO_PLATFORM == RETRO_iOS || RETRO_PLATFORM == RETRO_PS3
 
+#if RETRO_PLATFORM == RETRO_PS3 && defined(RSDK_USE_TINY3D)
+#undef RETRO_RENDERDEVICE_TINY3D
+#define RETRO_RENDERDEVICE_TINY3D (1)
+#else
 #undef RETRO_RENDERDEVICE_SDL2
 #define RETRO_RENDERDEVICE_SDL2 (1)
+#endif
 
 #undef RETRO_AUDIODEVICE_SDL2
 #define RETRO_AUDIODEVICE_SDL2 (1)
@@ -661,6 +667,10 @@ extern "C" {
 // https://wiki.libsdl.org/FAQDevelopment#do_i_include_sdl.h_or_sdlsdl.h
 #include "SDL.h"
 #endif
+#endif
+
+#if RETRO_RENDERDEVICE_TINY3D
+#include <tiny3d.h>
 #endif
 
 #include <theora/theoradec.h>

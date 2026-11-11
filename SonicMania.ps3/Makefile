@@ -44,6 +44,7 @@ INCLUDES	:=	\
 	../dependencies/RSDKv5/dependencies/all/Pugixml/ 	\
 	../dependencies/RSDKv5/dependencies/all/iniparser/	\
 	../dependencies/RSDKv5/dependencies/all/Tremor		\
+	../Tiny3d/											\
 	../SonicMania/   									\
 	../SonicMania/Objects
 PKGFILES	:=	../pkgfiles
@@ -98,7 +99,17 @@ EXTRA_OFLAGS = -falign-functions -falign-jumps \
 -ftree-vrp \
 -fvect-cost-model=cheap
 
-RSDK_flags	=	-D__PS3__ -DRETRO_STANDALONE=0 -DRETRO_USE_MOD_LOADER=1 -DRETRO_DISABLE_LOG -DGAME_VERSION=5 -DPS3_CONSOLE_MODE
+USE_TINY3D	?= 0
+
+ifeq ($(USE_TINY3D), 1)
+TINY3D_FLAGS = -DRSDK_USE_TINY3D
+TINY3D_LIBS  = -ltiny3d
+else
+TINY3D_FLAGS =
+TINY3D_LIBS  =
+endif
+
+RSDK_flags	=	-D__PS3__ -DRETRO_STANDALONE=0 -DRETRO_USE_MOD_LOADER=1 -DRETRO_DISABLE_LOG -DGAME_VERSION=5 -DPS3_CONSOLE_MODE $(TINY3D_FLAGS)
 CFLAGS		=	-g3 -O1 $(EXTRA_OFLAGS) -Wall -fpermissive -mcpu=cell $(MACHDEP) $(INCLUDE) $(RSDK_flags)
 CXXFLAGS	=	$(CFLAGS) -std=c++11
 
@@ -107,7 +118,7 @@ LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:=	$(shell pkg-config --libs sdl2 theora) -lnet -lsysutil -lsysmodule
+LIBS	:=	$(shell pkg-config --libs sdl2 theora) $(TINY3D_LIBS) -lnet -lsysutil -lsysmodule
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

@@ -271,8 +271,7 @@ void RenderDevice::FlipScreen()
         }
     }
 
-    // Present frame on RSX via Tiny3D with hardware VSync
-    tiny3d_WaitRSX();
+    // Present frame on RSX via Tiny3D with hardware VSync (tiny3d_Flip synchronizes flip and waits for vblank)
     tiny3d_Flip();
 }
 

@@ -5,6 +5,9 @@ RenderDevice::Tiny3DTexture RenderDevice::videoTextureY;
 RenderDevice::Tiny3DTexture RenderDevice::videoTextureU;
 RenderDevice::Tiny3DTexture RenderDevice::videoTextureV;
 
+uint32 RenderDevice::videoWidth  = 0;
+uint32 RenderDevice::videoHeight = 0;
+
 uint32 RenderDevice::displayModeIndex = 0;
 int32 RenderDevice::displayModeCount  = 0;
 
@@ -78,23 +81,33 @@ void RenderDevice::CopyFrameBuffer()
 
 void RenderDevice::DrawQuad(float x, float y, float w, float h, float u1, float v1, float u2, float v2, uint32 color)
 {
-    tiny3d_SetPolygon(TINY3D_QUADS);
+    tiny3d_SetPolygon(TINY3D_TRIANGLES);
 
+    // Triangle 1: Top-Left, Bottom-Left, Bottom-Right
     tiny3d_VertexPos(x, y, 65535.0f);
     tiny3d_VertexColor(color);
     tiny3d_VertexTexture(u1, v1);
 
-    tiny3d_VertexPos(x + w, y, 65535.0f);
+    tiny3d_VertexPos(x, y + h, 65535.0f);
     tiny3d_VertexColor(color);
-    tiny3d_VertexTexture(u2, v1);
+    tiny3d_VertexTexture(u1, v2);
 
     tiny3d_VertexPos(x + w, y + h, 65535.0f);
     tiny3d_VertexColor(color);
     tiny3d_VertexTexture(u2, v2);
 
-    tiny3d_VertexPos(x, y + h, 65535.0f);
+    // Triangle 2: Top-Left, Bottom-Right, Top-Right
+    tiny3d_VertexPos(x, y, 65535.0f);
     tiny3d_VertexColor(color);
-    tiny3d_VertexTexture(u1, v2);
+    tiny3d_VertexTexture(u1, v1);
+
+    tiny3d_VertexPos(x + w, y + h, 65535.0f);
+    tiny3d_VertexColor(color);
+    tiny3d_VertexTexture(u2, v2);
+
+    tiny3d_VertexPos(x + w, y, 65535.0f);
+    tiny3d_VertexColor(color);
+    tiny3d_VertexTexture(u2, v1);
 
     tiny3d_End();
 }
@@ -133,7 +146,10 @@ void RenderDevice::FlipScreen()
     uint8 dimAlpha = (uint8)(dimAmount * 255.0f);
     uint32 quadColor = (0xFF << 24) | (dimAlpha << 16) | (dimAlpha << 8) | dimAlpha;
 
-    if (lastTextureFormat == SHADER_YUV_420 || lastTextureFormat == SHADER_YUV_422 || lastTextureFormat == SHADER_YUV_444) {
+    bool32 isYUV = (videoSettings.screenCount == 0) &&
+                   (lastTextureFormat == SHADER_YUV_420 || lastTextureFormat == SHADER_YUV_422 || lastTextureFormat == SHADER_YUV_444);
+
+    if (isYUV) {
         // Native Tiny3D hardware YUV decoding
         tiny3d_Enable_YUV(USE_YUV_8BIT_TEXTURES);
 
@@ -144,12 +160,18 @@ void RenderDevice::FlipScreen()
         tiny3d_SetTextureWrap(2, videoTextureV.offset, videoTextureV.width, videoTextureV.height, videoTextureV.pitch,
                               TINY3D_TEX_FORMAT_L8, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
 
+        float maxU = (videoWidth > 0 && videoTextureY.width > 0) ? ((float)videoWidth / (float)videoTextureY.width) : 1.0f;
+        float maxV = (videoHeight > 0 && videoTextureY.height > 0) ? ((float)videoHeight / (float)videoTextureY.height) : 1.0f;
+
         // Draw video quad full screen
-        DrawQuad(0.0f, 0.0f, virtualWidth, virtualHeight, 0.0f, 0.0f, 1.0f, 1.0f, quadColor);
+        DrawQuad(0.0f, 0.0f, virtualWidth, virtualHeight, 0.0f, 0.0f, maxU, maxV, quadColor);
 
         tiny3d_Disable_YUV();
+        tiny3d_Dirty_Status();
     }
     else {
+        if (lastTextureFormat == SHADER_YUV_420 || lastTextureFormat == SHADER_YUV_422 || lastTextureFormat == SHADER_YUV_444)
+            lastTextureFormat = (uint8)-1;
         int32 startVert = 0;
 
         auto DrawScreenQuad = [&](int32 vertIdx, Tiny3DTexture &tex) {
@@ -249,7 +271,8 @@ void RenderDevice::FlipScreen()
         }
     }
 
-    // Present frame on RSX via Tiny3D
+    // Present frame on RSX via Tiny3D with hardware VSync
+    tiny3d_WaitRSX();
     tiny3d_Flip();
 }
 
@@ -303,26 +326,15 @@ void RenderDevice::RefreshWindow()
     videoSettings.windowState = WINDOWSTATE_ACTIVE;
 }
 
-void RenderDevice::InitFPSCap()
-{
-    targetFreq = SDL_GetPerformanceFrequency() / videoSettings.refreshRate;
-    curTicks   = 0;
-    prevTicks  = 0;
-}
+void RenderDevice::InitFPSCap() {}
 
 bool RenderDevice::CheckFPSCap()
 {
-    curTicks = SDL_GetPerformanceCounter();
-    if (curTicks >= prevTicks + targetFreq)
-        return true;
-
-    return false;
+    // Hardware VSync is handled directly by RSX flip synchronization in tiny3d_Flip()
+    return true;
 }
 
-void RenderDevice::UpdateFPSCap()
-{
-    prevTicks = curTicks;
-}
+void RenderDevice::UpdateFPSCap() {}
 
 void RenderDevice::InitVertexBuffer()
 {
@@ -824,6 +836,8 @@ void RenderDevice::SetupVideoTexture_YUV420(int32 width, int32 height, uint8 *yP
                                             int32 strideV)
 {
     lastTextureFormat = SHADER_YUV_420;
+    videoWidth        = (uint32)width;
+    videoHeight       = (uint32)height;
 
     // Copy Y Plane
     if (videoTextureY.pixels) {
@@ -865,6 +879,8 @@ void RenderDevice::SetupVideoTexture_YUV422(int32 width, int32 height, uint8 *yP
                                             int32 strideV)
 {
     lastTextureFormat = SHADER_YUV_422;
+    videoWidth        = (uint32)width;
+    videoHeight       = (uint32)height;
 
     if (videoTextureY.pixels) {
         uint8 *dst = (uint8 *)videoTextureY.pixels;
@@ -902,6 +918,8 @@ void RenderDevice::SetupVideoTexture_YUV444(int32 width, int32 height, uint8 *yP
                                             int32 strideV)
 {
     lastTextureFormat = SHADER_YUV_444;
+    videoWidth        = (uint32)width;
+    videoHeight       = (uint32)height;
 
     if (videoTextureY.pixels) {
         uint8 *dst = (uint8 *)videoTextureY.pixels;

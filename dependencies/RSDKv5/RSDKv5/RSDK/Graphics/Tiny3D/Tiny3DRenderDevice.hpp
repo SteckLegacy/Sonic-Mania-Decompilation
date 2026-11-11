@@ -70,6 +70,9 @@ public:
     static Tiny3DTexture videoTextureU;
     static Tiny3DTexture videoTextureV;
 
+    static uint32 videoWidth;
+    static uint32 videoHeight;
+
 private:
     static bool SetupRendering();
     static void InitVertexBuffer();

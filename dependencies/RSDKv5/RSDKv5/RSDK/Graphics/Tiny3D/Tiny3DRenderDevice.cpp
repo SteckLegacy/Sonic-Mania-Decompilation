@@ -146,80 +146,40 @@ void RenderDevice::FlipScreen()
     uint8 dimAlpha = (uint8)(dimAmount * 255.0f);
     uint32 quadColor = (0xFF << 24) | (dimAlpha << 16) | (dimAlpha << 8) | dimAlpha;
 
-    bool32 isYUV = (videoSettings.screenCount == 0) &&
-                   (lastTextureFormat == SHADER_YUV_420 || lastTextureFormat == SHADER_YUV_422 || lastTextureFormat == SHADER_YUV_444);
+    int32 startVert = 0;
 
-    if (isYUV) {
-        // Native Tiny3D hardware YUV decoding
-        tiny3d_Enable_YUV(USE_YUV_8BIT_TEXTURES);
+    auto DrawScreenQuad = [&](int32 vertIdx, Tiny3DTexture &tex) {
+        float x1 = vertexBuffer[vertIdx].pos.x * scaleX;
+        float y1 = vertexBuffer[vertIdx].pos.y * scaleY;
+        float x2 = vertexBuffer[vertIdx + 2].pos.x * scaleX;
+        float y2 = vertexBuffer[vertIdx + 2].pos.y * scaleY;
+        float w  = x2 - x1;
+        float h  = y2 - y1;
 
-        tiny3d_SetTextureWrap(0, videoTextureY.offset, videoTextureY.width, videoTextureY.height, videoTextureY.pitch,
-                              TINY3D_TEX_FORMAT_L8, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
-        tiny3d_SetTextureWrap(1, videoTextureU.offset, videoTextureU.width, videoTextureU.height, videoTextureU.pitch,
-                              TINY3D_TEX_FORMAT_L8, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
-        tiny3d_SetTextureWrap(2, videoTextureV.offset, videoTextureV.width, videoTextureV.height, videoTextureV.pitch,
-                              TINY3D_TEX_FORMAT_L8, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
+        float u1 = vertexBuffer[vertIdx].tex.x;
+        float v1 = vertexBuffer[vertIdx].tex.y;
+        float u2 = vertexBuffer[vertIdx + 2].tex.x;
+        float v2 = vertexBuffer[vertIdx + 2].tex.y;
 
-        float maxU = (videoWidth > 0 && videoTextureY.width > 0) ? ((float)videoWidth / (float)videoTextureY.width) : 1.0f;
-        float maxV = (videoHeight > 0 && videoTextureY.height > 0) ? ((float)videoHeight / (float)videoTextureY.height) : 1.0f;
+        tiny3d_SetTextureWrap(0, tex.offset, tex.width, tex.height, tex.pitch,
+                              tex.format, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_NEAREST);
 
-        // Draw video quad full screen
-        DrawQuad(0.0f, 0.0f, virtualWidth, virtualHeight, 0.0f, 0.0f, maxU, maxV, quadColor);
+        DrawQuad(x1, y1, w, h, u1, v1, u2, v2, quadColor);
+    };
 
-        tiny3d_Disable_YUV();
-        tiny3d_Dirty_Status();
-    }
-    else {
-        if (lastTextureFormat == SHADER_YUV_420 || lastTextureFormat == SHADER_YUV_422 || lastTextureFormat == SHADER_YUV_444)
-            lastTextureFormat = (uint8)-1;
-        int32 startVert = 0;
+    switch (videoSettings.screenCount) {
+        default:
+        case 0:
+            if (imageTexture.pixels) {
+                float maxU = (videoWidth > 0 && imageTexture.width > 0) ? ((float)videoWidth / (float)imageTexture.width) : 1.0f;
+                float maxV = (videoHeight > 0 && imageTexture.height > 0) ? ((float)videoHeight / (float)imageTexture.height) : 1.0f;
 
-        auto DrawScreenQuad = [&](int32 vertIdx, Tiny3DTexture &tex) {
-            float x1 = vertexBuffer[vertIdx].pos.x * scaleX;
-            float y1 = vertexBuffer[vertIdx].pos.y * scaleY;
-            float x2 = vertexBuffer[vertIdx + 2].pos.x * scaleX;
-            float y2 = vertexBuffer[vertIdx + 2].pos.y * scaleY;
-            float w  = x2 - x1;
-            float h  = y2 - y1;
+                tiny3d_SetTextureWrap(0, imageTexture.offset, imageTexture.width, imageTexture.height, imageTexture.pitch,
+                                      imageTexture.format, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
 
-            float u1 = vertexBuffer[vertIdx].tex.x;
-            float v1 = vertexBuffer[vertIdx].tex.y;
-            float u2 = vertexBuffer[vertIdx + 2].tex.x;
-            float v2 = vertexBuffer[vertIdx + 2].tex.y;
-
-            tiny3d_SetTextureWrap(0, tex.offset, tex.width, tex.height, tex.pitch,
-                                  tex.format, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_NEAREST);
-
-            DrawQuad(x1, y1, w, h, u1, v1, u2, v2, quadColor);
-        };
-
-        switch (videoSettings.screenCount) {
-            default:
-            case 0:
-#if RETRO_REV02
-                startVert = 54;
-#else
-                startVert = 18;
-#endif
-                if (imageTexture.pixels) {
-                    float x1 = vertexBuffer[startVert].pos.x * scaleX;
-                    float y1 = vertexBuffer[startVert].pos.y * scaleY;
-                    float x2 = vertexBuffer[startVert + 2].pos.x * scaleX;
-                    float y2 = vertexBuffer[startVert + 2].pos.y * scaleY;
-                    float w  = x2 - x1;
-                    float h  = y2 - y1;
-
-                    float u1 = vertexBuffer[startVert].tex.x;
-                    float v1 = vertexBuffer[startVert].tex.y;
-                    float u2 = vertexBuffer[startVert + 2].tex.x;
-                    float v2 = vertexBuffer[startVert + 2].tex.y;
-
-                    tiny3d_SetTextureWrap(0, imageTexture.offset, imageTexture.width, imageTexture.height, imageTexture.pitch,
-                                          imageTexture.format, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
-
-                    DrawQuad(x1, y1, w, h, u1, v1, u2, v2, quadColor);
-                }
-                break;
+                DrawQuad(0.0f, 0.0f, virtualWidth, virtualHeight, 0.0f, 0.0f, maxU, maxV, quadColor);
+            }
+            break;
 
             case 1:
                 startVert = 0;
@@ -831,45 +791,45 @@ void RenderDevice::SetupImageTexture(int32 width, int32 height, uint8 *imagePixe
     }
 }
 
+static inline uint8_t ClampU8(int32_t val)
+{
+    if (val < 0)
+        return 0;
+    if (val > 255)
+        return 255;
+    return (uint8_t)val;
+}
+
 void RenderDevice::SetupVideoTexture_YUV420(int32 width, int32 height, uint8 *yPlane, uint8 *uPlane, uint8 *vPlane, int32 strideY, int32 strideU,
                                             int32 strideV)
 {
-    lastTextureFormat = SHADER_YUV_420;
+    lastTextureFormat = SHADER_RGB_IMAGE;
     videoWidth        = (uint32)width;
     videoHeight       = (uint32)height;
 
-    // Copy Y Plane
-    if (videoTextureY.pixels) {
-        uint8 *dst = (uint8 *)videoTextureY.pixels;
-        uint8 *src = yPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, width);
-            src += strideY;
-            dst += videoTextureY.pitch;
-        }
-    }
+    if (!imageTexture.pixels)
+        return;
 
-    // Copy U Plane (width/2, height/2)
-    int32 halfW = width / 2;
-    int32 halfH = height / 2;
-    if (videoTextureU.pixels) {
-        uint8 *dst = (uint8 *)videoTextureU.pixels;
-        uint8 *src = uPlane;
-        for (int32 y = 0; y < halfH; ++y) {
-            memcpy(dst, src, halfW);
-            src += strideU;
-            dst += videoTextureU.pitch;
-        }
-    }
+    uint32 *dstARGB    = (uint32 *)imageTexture.pixels;
+    int32 dstPitch32   = imageTexture.pitch / sizeof(uint32);
 
-    // Copy V Plane (width/2, height/2)
-    if (videoTextureV.pixels) {
-        uint8 *dst = (uint8 *)videoTextureV.pixels;
-        uint8 *src = vPlane;
-        for (int32 y = 0; y < halfH; ++y) {
-            memcpy(dst, src, halfW);
-            src += strideV;
-            dst += videoTextureV.pitch;
+    for (int32 y = 0; y < height; ++y) {
+        const uint8 *ySrc = yPlane + y * strideY;
+        const uint8 *uSrc = uPlane + (y >> 1) * strideU;
+        const uint8 *vSrc = vPlane + (y >> 1) * strideV;
+        uint32 *rowDst    = dstARGB + y * dstPitch32;
+
+        for (int32 x = 0; x < width; ++x) {
+            int32 Y = (int32)ySrc[x] - 16;
+            int32 U = (int32)uSrc[x >> 1] - 128;
+            int32 V = (int32)vSrc[x >> 1] - 128;
+
+            int32 C = Y < 0 ? 0 : Y;
+            int32 r = (298 * C + 409 * V + 128) >> 8;
+            int32 g = (298 * C - 100 * U - 208 * V + 128) >> 8;
+            int32 b = (298 * C + 516 * U + 128) >> 8;
+
+            rowDst[x] = (0xFF << 24) | (ClampU8(r) << 16) | (ClampU8(g) << 8) | ClampU8(b);
         }
     }
 }
@@ -877,38 +837,33 @@ void RenderDevice::SetupVideoTexture_YUV420(int32 width, int32 height, uint8 *yP
 void RenderDevice::SetupVideoTexture_YUV422(int32 width, int32 height, uint8 *yPlane, uint8 *uPlane, uint8 *vPlane, int32 strideY, int32 strideU,
                                             int32 strideV)
 {
-    lastTextureFormat = SHADER_YUV_422;
+    lastTextureFormat = SHADER_RGB_IMAGE;
     videoWidth        = (uint32)width;
     videoHeight       = (uint32)height;
 
-    if (videoTextureY.pixels) {
-        uint8 *dst = (uint8 *)videoTextureY.pixels;
-        uint8 *src = yPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, width);
-            src += strideY;
-            dst += videoTextureY.pitch;
-        }
-    }
+    if (!imageTexture.pixels)
+        return;
 
-    int32 halfW = width / 2;
-    if (videoTextureU.pixels) {
-        uint8 *dst = (uint8 *)videoTextureU.pixels;
-        uint8 *src = uPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, halfW);
-            src += strideU;
-            dst += videoTextureU.pitch;
-        }
-    }
+    uint32 *dstARGB    = (uint32 *)imageTexture.pixels;
+    int32 dstPitch32   = imageTexture.pitch / sizeof(uint32);
 
-    if (videoTextureV.pixels) {
-        uint8 *dst = (uint8 *)videoTextureV.pixels;
-        uint8 *src = vPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, halfW);
-            src += strideV;
-            dst += videoTextureV.pitch;
+    for (int32 y = 0; y < height; ++y) {
+        const uint8 *ySrc = yPlane + y * strideY;
+        const uint8 *uSrc = uPlane + y * strideU;
+        const uint8 *vSrc = vPlane + y * strideV;
+        uint32 *rowDst    = dstARGB + y * dstPitch32;
+
+        for (int32 x = 0; x < width; ++x) {
+            int32 Y = (int32)ySrc[x] - 16;
+            int32 U = (int32)uSrc[x >> 1] - 128;
+            int32 V = (int32)vSrc[x >> 1] - 128;
+
+            int32 C = Y < 0 ? 0 : Y;
+            int32 r = (298 * C + 409 * V + 128) >> 8;
+            int32 g = (298 * C - 100 * U - 208 * V + 128) >> 8;
+            int32 b = (298 * C + 516 * U + 128) >> 8;
+
+            rowDst[x] = (0xFF << 24) | (ClampU8(r) << 16) | (ClampU8(g) << 8) | ClampU8(b);
         }
     }
 }
@@ -916,37 +871,33 @@ void RenderDevice::SetupVideoTexture_YUV422(int32 width, int32 height, uint8 *yP
 void RenderDevice::SetupVideoTexture_YUV444(int32 width, int32 height, uint8 *yPlane, uint8 *uPlane, uint8 *vPlane, int32 strideY, int32 strideU,
                                             int32 strideV)
 {
-    lastTextureFormat = SHADER_YUV_444;
+    lastTextureFormat = SHADER_RGB_IMAGE;
     videoWidth        = (uint32)width;
     videoHeight       = (uint32)height;
 
-    if (videoTextureY.pixels) {
-        uint8 *dst = (uint8 *)videoTextureY.pixels;
-        uint8 *src = yPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, width);
-            src += strideY;
-            dst += videoTextureY.pitch;
-        }
-    }
+    if (!imageTexture.pixels)
+        return;
 
-    if (videoTextureU.pixels) {
-        uint8 *dst = (uint8 *)videoTextureU.pixels;
-        uint8 *src = uPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, width);
-            src += strideU;
-            dst += videoTextureU.pitch;
-        }
-    }
+    uint32 *dstARGB    = (uint32 *)imageTexture.pixels;
+    int32 dstPitch32   = imageTexture.pitch / sizeof(uint32);
 
-    if (videoTextureV.pixels) {
-        uint8 *dst = (uint8 *)videoTextureV.pixels;
-        uint8 *src = vPlane;
-        for (int32 y = 0; y < height; ++y) {
-            memcpy(dst, src, width);
-            src += strideV;
-            dst += videoTextureV.pitch;
+    for (int32 y = 0; y < height; ++y) {
+        const uint8 *ySrc = yPlane + y * strideY;
+        const uint8 *uSrc = uPlane + y * strideU;
+        const uint8 *vSrc = vPlane + y * strideV;
+        uint32 *rowDst    = dstARGB + y * dstPitch32;
+
+        for (int32 x = 0; x < width; ++x) {
+            int32 Y = (int32)ySrc[x] - 16;
+            int32 U = (int32)uSrc[x] - 128;
+            int32 V = (int32)vSrc[x] - 128;
+
+            int32 C = Y < 0 ? 0 : Y;
+            int32 r = (298 * C + 409 * V + 128) >> 8;
+            int32 g = (298 * C - 100 * U - 208 * V + 128) >> 8;
+            int32 b = (298 * C + 516 * U + 128) >> 8;
+
+            rowDst[x] = (0xFF << 24) | (ClampU8(r) << 16) | (ClampU8(g) << 8) | ClampU8(b);
         }
     }
 }

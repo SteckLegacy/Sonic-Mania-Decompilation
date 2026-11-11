@@ -103,7 +103,7 @@ USE_TINY3D	?= 0
 
 ifeq ($(USE_TINY3D), 1)
 TINY3D_FLAGS = -DRSDK_USE_TINY3D
-TINY3D_LIBS  = -ltiny3d
+TINY3D_LIBS  = -ltiny3d -lrsx -lgcm_sys -lsimdmath -lio -lrt -llv2 -lm
 else
 TINY3D_FLAGS =
 TINY3D_LIBS  =

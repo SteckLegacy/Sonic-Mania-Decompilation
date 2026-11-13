@@ -108,6 +108,7 @@ struct DevMenu {
     int32 scrollPos;
     int32 timer;
     bool32 windowed;
+    bool32 mirrorMode;
     int8 sceneState;
     int8 listPos;
     int8 windowScale;

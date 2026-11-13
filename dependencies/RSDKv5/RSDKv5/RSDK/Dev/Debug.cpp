@@ -907,9 +907,14 @@ void RSDK::DevMenu_OptionsMenu()
         switch (devMenu.selection) {
             case 0: {
                 devMenu.windowed    = videoSettings.windowed;
+                devMenu.mirrorMode  = videoSettings.mirrorMode;
                 devMenu.windowScale = (videoSettings.windowHeight / videoSettings.pixHeight) - 1;
+                if (devMenu.windowScale < 0)
+                    devMenu.windowScale = 0;
+                else if (devMenu.windowScale > 3)
+                    devMenu.windowScale = 3;
 
-                int32 aspect = (int32)((videoSettings.windowWidth / (float)videoSettings.windowHeight) * (float)SCREEN_YSIZE) >> 3;
+                int32 aspect = (videoSettings.pixWidth > 0 ? videoSettings.pixWidth : (int32)((videoSettings.windowWidth / (float)videoSettings.windowHeight) * (float)SCREEN_YSIZE)) >> 3;
                 switch (aspect) {
                     default:
                     case 40: devMenu.windowAspect = 0; break; // 4:3
@@ -1002,12 +1007,12 @@ void RSDK::DevMenu_VideoOptionsMenu()
     DrawDevString(aspect, currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
 
     dy += 8;
-    DrawDevString("Fullscreen:", currentScreen->center.x - 96, dy, 0, selectionColors[2]);
-    DrawDevString(devMenu.windowed ? "NO" : "YES", currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
+    DrawDevString("Screen Shader:", currentScreen->center.x - 96, dy, ALIGN_LEFT, selectionColors[2]);
+    DrawDevString(shaderList[videoSettings.shaderID].name, currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
 
     dy += 8;
-    DrawDevString("Screen Shader:", currentScreen->center.x - 96, dy, ALIGN_LEFT, selectionColors[3]);
-    DrawDevString(shaderList[videoSettings.shaderID].name, currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
+    DrawDevString("Mirror Mode:", currentScreen->center.x - 96, dy, ALIGN_LEFT, selectionColors[3]);
+    DrawDevString(devMenu.mirrorMode ? "ON" : "OFF", currentScreen->center.x + 80, dy, ALIGN_CENTER, 0xF0F080);
 
     dy += 16;
     DrawDevString("Confirm", currentScreen->center.x, dy, ALIGN_CENTER, selectionColors[4]);
@@ -1071,14 +1076,7 @@ void RSDK::DevMenu_VideoOptionsMenu()
                 devMenu.windowAspect = 4;
             break;
 
-        case 2: // fullscreen
-            if (controller[CONT_ANY].keyLeft.press || controller[CONT_ANY].keyRight.press) {
-                devMenu.windowed ^= 1;
-                changedVideoSettings = true;
-            }
-            break;
-
-        case 3: // screenShader
+        case 2: // screenShader
             if (controller[CONT_ANY].keyLeft.press) {
                 videoSettings.shaderID--;
                 changedVideoSettings = true;
@@ -1094,6 +1092,13 @@ void RSDK::DevMenu_VideoOptionsMenu()
                 videoSettings.shaderID = MAX(userShaderCount - 1, 0);
             break;
 
+        case 3: // mirrorMode
+            if (controller[CONT_ANY].keyLeft.press || controller[CONT_ANY].keyRight.press) {
+                devMenu.mirrorMode ^= 1;
+                changedVideoSettings = true;
+            }
+            break;
+
         case 4: // confirm
         {
             bool32 confirm = controller[CONT_ANY].keyA.press;
@@ -1106,31 +1111,31 @@ void RSDK::DevMenu_VideoOptionsMenu()
 
             if (controller[CONT_ANY].keyStart.press || confirm) {
                 // do confirm
-                videoSettings.windowed = devMenu.windowed;
-                shaderList[0].linear   = !devMenu.windowed;
                 if (!devMenu.windowScale)
                     videoSettings.shaderID = SHADER_NONE;
                 devMenu.windowScale++;
 
+                videoSettings.windowed   = (devMenu.windowScale < 4);
+                videoSettings.mirrorMode = devMenu.mirrorMode;
+                shaderList[0].linear     = (devMenu.windowScale >= 4);
+
                 int32 width = 0;
                 switch (devMenu.windowAspect) {
-                    default: width = videoSettings.windowWidth; break;
-                    case 0: width = 3 - (int32)(videoSettings.pixHeight * -1.3333334f); break; // 16:9
-                    case 1: width = 3 - (int32)(videoSettings.pixHeight * -1.5f); break;       // 4:3
-                    case 2: width = 3 - (int32)(videoSettings.pixHeight * -1.6f); break;       // 3:2
-                    case 3: width = 3 - (int32)(videoSettings.pixHeight * -1.6666666f); break; // 16:10
-                    case 4: width = 3 - (int32)(videoSettings.pixHeight * -1.7777778f); break; // 5:3
+                    default: width = 424; break;
+                    case 0: width = 320; break; // 4:3
+                    case 1: width = 360; break; // 3:2
+                    case 2: width = 384; break; // 16:10
+                    case 3: width = 400; break; // 5:3
+                    case 4: width = 424; break; // 16:9
                 }
-                width &= 0x7FF8;
+                width = (width + 3) & 0xFFFFFFFC;
 
 #if !RETRO_USE_ORIGINAL_CODE
                 if (customSettings.maxPixWidth && width > customSettings.maxPixWidth)
                     width = customSettings.maxPixWidth;
-#else
-                if (width > DEFAULT_PIXWIDTH)
-                    width = DEFAULT_PIXWIDTH;
 #endif
 
+                videoSettings.pixWidth     = width;
                 videoSettings.windowWidth  = width * devMenu.windowScale;
                 videoSettings.windowHeight = videoSettings.pixHeight * devMenu.windowScale;
                 UpdateGameWindow();

@@ -138,9 +138,26 @@ void RenderDevice::FlipScreen()
     const float virtualWidth  = 848.0f;
     const float virtualHeight = 512.0f;
 
-    // Calculate scale from native game coordinates (pixWidth x SCREEN_YSIZE) to virtual (848 x 512)
-    float scaleX = virtualWidth / (float)videoSettings.pixWidth;
-    float scaleY = virtualHeight / (float)SCREEN_YSIZE;
+    // Determine window scale factor: 1x = 0.25, 2x = 0.50, 3x = 0.75, 4x = 1.0 (full screen)
+    int32 winScale = (videoSettings.pixHeight > 0) ? (videoSettings.windowHeight / videoSettings.pixHeight) : 4;
+    if (winScale < 1)
+        winScale = 1;
+    if (winScale >= 4)
+        winScale = 4;
+
+    float sizeScale = (float)winScale / 4.0f;
+
+    // Keep full 16:9 internal FOV (screens[0].size.x == 424), squish horizontally to selected aspect ratio with pillarboxes,
+    // and center the viewport for 1x, 2x, 3x, or 4x (full screen)
+    int32 aspectWidth  = (videoSettings.pixWidth > 0 && videoSettings.pixWidth < DEFAULT_PIXWIDTH) ? videoSettings.pixWidth : DEFAULT_PIXWIDTH;
+    float targetWidth  = (virtualWidth * ((float)aspectWidth / (float)DEFAULT_PIXWIDTH)) * sizeScale;
+    float targetHeight = virtualHeight * sizeScale;
+    float offsetX      = (virtualWidth - targetWidth) * 0.5f;
+    float offsetY      = (virtualHeight - targetHeight) * 0.5f;
+
+    // Calculate scale from native game coordinates (screens[0].size.x x SCREEN_YSIZE) to target rectangle
+    float scaleX = targetWidth / (float)screens[0].size.x;
+    float scaleY = targetHeight / (float)SCREEN_YSIZE;
 
     // Dim factor color multiplier
     uint8 dimAlpha = (uint8)(dimAmount * 255.0f);
@@ -149,16 +166,16 @@ void RenderDevice::FlipScreen()
     int32 startVert = 0;
 
     auto DrawScreenQuad = [&](int32 vertIdx, Tiny3DTexture &tex) {
-        float x1 = vertexBuffer[vertIdx].pos.x * scaleX;
-        float y1 = vertexBuffer[vertIdx].pos.y * scaleY;
-        float x2 = vertexBuffer[vertIdx + 2].pos.x * scaleX;
-        float y2 = vertexBuffer[vertIdx + 2].pos.y * scaleY;
+        float x1 = offsetX + (vertexBuffer[vertIdx].pos.x * scaleX);
+        float y1 = offsetY + (vertexBuffer[vertIdx].pos.y * scaleY);
+        float x2 = offsetX + (vertexBuffer[vertIdx + 2].pos.x * scaleX);
+        float y2 = offsetY + (vertexBuffer[vertIdx + 2].pos.y * scaleY);
         float w  = x2 - x1;
         float h  = y2 - y1;
 
-        float u1 = vertexBuffer[vertIdx].tex.x;
+        float u1 = videoSettings.mirrorMode ? vertexBuffer[vertIdx + 2].tex.x : vertexBuffer[vertIdx].tex.x;
         float v1 = vertexBuffer[vertIdx].tex.y;
-        float u2 = vertexBuffer[vertIdx + 2].tex.x;
+        float u2 = videoSettings.mirrorMode ? vertexBuffer[vertIdx].tex.x : vertexBuffer[vertIdx + 2].tex.x;
         float v2 = vertexBuffer[vertIdx + 2].tex.y;
 
         tiny3d_SetTextureWrap(0, tex.offset, tex.width, tex.height, tex.pitch,
@@ -177,7 +194,9 @@ void RenderDevice::FlipScreen()
                 tiny3d_SetTextureWrap(0, imageTexture.offset, imageTexture.width, imageTexture.height, imageTexture.pitch,
                                       imageTexture.format, TEXTWRAP_CLAMP, TEXTWRAP_CLAMP, TEXTURE_LINEAR);
 
-                DrawQuad(0.0f, 0.0f, virtualWidth, virtualHeight, 0.0f, 0.0f, maxU, maxV, quadColor);
+                float uStart = videoSettings.mirrorMode ? maxU : 0.0f;
+                float uEnd   = videoSettings.mirrorMode ? 0.0f : maxU;
+                DrawQuad(offsetX, offsetY, targetWidth, targetHeight, uStart, 0.0f, uEnd, maxV, quadColor);
             }
             break;
 
@@ -303,7 +322,7 @@ void RenderDevice::InitVertexBuffer()
 
     for (int32 v = 0; v < vertCount; ++v) {
         RenderVertex *vertex = &vertBuffer[v];
-        vertex->pos.x        = NORMALIZE(vertex->pos.x, -1.0, 1.0) * videoSettings.pixWidth;
+        vertex->pos.x        = NORMALIZE(vertex->pos.x, -1.0, 1.0) * screens[0].size.x;
         vertex->pos.y        = (1.0 - NORMALIZE(vertex->pos.y, -1.0, 1.0)) * SCREEN_YSIZE;
 
         if (vertex->tex.x)
@@ -315,7 +334,7 @@ void RenderDevice::InitVertexBuffer()
 
     for (int32 v = 0; v < 6; ++v) {
         RenderVertex *vertex = &vertBuffer[vertCount + v];
-        vertex->pos.x        = NORMALIZE(vertex->pos.x, -1.0, 1.0) * videoSettings.pixWidth;
+        vertex->pos.x        = NORMALIZE(vertex->pos.x, -1.0, 1.0) * screens[0].size.x;
         vertex->pos.y        = (1.0 - NORMALIZE(vertex->pos.y, -1.0, 1.0)) * SCREEN_YSIZE;
 
         if (vertex->tex.x)
@@ -344,18 +363,8 @@ bool RenderDevice::InitGraphicsAPI()
 
         screens[s].size.y = videoSettings.pixHeight;
 
-        float viewAspect = (float)viewSize.x / (float)viewSize.y;
-        screenWidth      = (int32)((viewAspect * videoSettings.pixHeight) + 3) & 0xFFFFFFFC;
-        if (screenWidth < videoSettings.pixWidth)
-            screenWidth = videoSettings.pixWidth;
-
-#if !RETRO_USE_ORIGINAL_CODE
-        if (customSettings.maxPixWidth && screenWidth > customSettings.maxPixWidth)
-            screenWidth = customSettings.maxPixWidth;
-#else
-        if (screenWidth > DEFAULT_PIXWIDTH)
-            screenWidth = DEFAULT_PIXWIDTH;
-#endif
+        // Always render internal framebuffer at full 16:9 FOV (424x240)
+        screenWidth = DEFAULT_PIXWIDTH;
 
         memset(&screens[s].frameBuffer, 0, sizeof(screens[s].frameBuffer));
         SetScreenSize(s, screenWidth, screens[s].size.y);
@@ -480,7 +489,7 @@ bool RenderDevice::SetupRendering()
     if (!InitGraphicsAPI() || !InitShaders())
         return false;
 
-    int32 size = videoSettings.pixWidth >= SCREEN_YSIZE ? videoSettings.pixWidth : SCREEN_YSIZE;
+    int32 size = SCREEN_XMAX >= SCREEN_YSIZE ? SCREEN_XMAX : SCREEN_YSIZE;
     scanlines  = (ScanlineInfo *)malloc(size * sizeof(ScanlineInfo));
     if (scanlines)
         memset(scanlines, 0, size * sizeof(ScanlineInfo));

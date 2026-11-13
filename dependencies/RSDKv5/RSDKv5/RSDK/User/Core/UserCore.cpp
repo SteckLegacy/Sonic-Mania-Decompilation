@@ -370,6 +370,7 @@ void RSDK::LoadSettingsINI()
         videoSettings.refreshRate   = iniparser_getint(ini, "Video:refreshRate", 60);
         videoSettings.shaderSupport = iniparser_getboolean(ini, "Video:shaderSupport", true);
         videoSettings.shaderID      = iniparser_getint(ini, "Video:screenShader", SHADER_NONE);
+        videoSettings.mirrorMode    = iniparser_getboolean(ini, "Video:mirrorMode", false);
 
 #if RETRO_PLATFORM == RETRO_PS3
         if (videoSettings.shaderID == SHADER_NONE) {
@@ -378,7 +379,7 @@ void RSDK::LoadSettingsINI()
 #endif
 
 #if !RETRO_USE_ORIGINAL_CODE
-        customSettings.maxPixWidth = iniparser_getint(ini, "Video:maxPixWidth", DEFAULT_PIXWIDTH);
+        customSettings.maxPixWidth = iniparser_getint(ini, "Video:maxPixWidth", 0);
 #endif
 
         engine.streamsEnabled = iniparser_getboolean(ini, "Audio:streamsEnabled", true);
@@ -518,6 +519,7 @@ void RSDK::LoadSettingsINI()
         videoSettings.fsHeight       = 0;
         videoSettings.refreshRate    = 60;
         videoSettings.shaderID       = SHADER_NONE;
+        videoSettings.mirrorMode     = false;
 
 #if RETRO_PLATFORM == RETRO_PS3
         // videoSettings.shaderID is already SHADER_NONE here, so we can directly set it.
@@ -545,7 +547,7 @@ void RSDK::LoadSettingsINI()
         sprintf_s(gameLogicName, sizeof(gameLogicName), "Game");
         customSettings.username[0] = 0;
 
-        customSettings.maxPixWidth = DEFAULT_PIXWIDTH;
+        customSettings.maxPixWidth = 0;
 
         if (customSettings.region >= 0) {
 #if RETRO_REV02
@@ -666,10 +668,7 @@ void RSDK::SaveSettingsINI(bool32 writeToFile)
         WriteText(file, "exclusiveFS=%s\n", (videoSettings.exclusiveFS ? "y" : "n"));
         WriteText(file, "vsync=%s\n", (videoSettings.vsync ? "y" : "n"));
         WriteText(file, "tripleBuffering=%s\n", (videoSettings.tripleBuffered ? "y" : "n"));
-        if (ini) {
-            if (strcmp(iniparser_getstring(ini, "Video:pixWidth", ";unknown;"), ";unknown;") == 0)
-                WriteText(file, "pixWidth=%d\n", videoSettings.pixWidth);
-        }
+        WriteText(file, "pixWidth=%d\n", videoSettings.pixWidth);
         WriteText(file, "winWidth=%d\n", videoSettings.windowWidth);
         WriteText(file, "winHeight=%d\n", videoSettings.windowHeight);
         if (videoSettings.fsWidth > 0)
@@ -681,6 +680,7 @@ void RSDK::SaveSettingsINI(bool32 writeToFile)
 
         WriteText(file, "shaderSupport=%s\n", (videoSettings.shaderSupport ? "y" : "n"));
         WriteText(file, "screenShader=%d\n", videoSettings.shaderID);
+        WriteText(file, "mirrorMode=%s\n", (videoSettings.mirrorMode ? "y" : "n"));
 
 #if !RETRO_USE_ORIGINAL_CODE
         WriteText(file, "; Maximum width the screen will be allowed to be. A value of 0 will disable the maximum width\n");

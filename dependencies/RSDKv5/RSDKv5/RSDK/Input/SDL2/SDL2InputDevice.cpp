@@ -41,6 +41,19 @@ void RSDK::SKU::InputDeviceSDL::UpdateInput()
             this->buttonMasks |= keyMasks[i];
     }
 
+    if (videoSettings.mirrorMode) {
+        int32 origMasks = this->buttonMasks;
+        this->buttonMasks &= ~(KEYMASK_LEFT | KEYMASK_RIGHT | KEYMASK_BUMPERL | KEYMASK_BUMPERR);
+        if (origMasks & KEYMASK_LEFT)
+            this->buttonMasks |= KEYMASK_RIGHT;
+        if (origMasks & KEYMASK_RIGHT)
+            this->buttonMasks |= KEYMASK_LEFT;
+        if (origMasks & KEYMASK_BUMPERL)
+            this->buttonMasks |= KEYMASK_BUMPERR;
+        if (origMasks & KEYMASK_BUMPERR)
+            this->buttonMasks |= KEYMASK_BUMPERL;
+    }
+
     int32 delta = SDL_GameControllerGetAxis(controllerPtr, SDL_CONTROLLER_AXIS_LEFTX);
     if (delta < 0)
         hDelta_L = -NORMALIZE(-delta, 1, 32768);
@@ -66,6 +79,11 @@ void RSDK::SKU::InputDeviceSDL::UpdateInput()
     else
         vDelta_R = NORMALIZE(delta, 0, 32767);
     vDelta_R = -vDelta_R;
+
+    if (videoSettings.mirrorMode) {
+        hDelta_L = -hDelta_L;
+        hDelta_R = -hDelta_R;
+    }
 
     triggerDeltaL = NORMALIZE(SDL_GameControllerGetAxis(controllerPtr, SDL_CONTROLLER_AXIS_TRIGGERLEFT), 0, 32767);
     triggerDeltaR = NORMALIZE(SDL_GameControllerGetAxis(controllerPtr, SDL_CONTROLLER_AXIS_TRIGGERRIGHT), 0, 32767);
